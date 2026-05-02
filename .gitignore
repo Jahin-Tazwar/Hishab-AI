@@ -20,3 +20,6 @@ coverage/
 htmlcov/
 .coverage
 .claude/
+.venv/
+venv/
+env/
