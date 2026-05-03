@@ -376,7 +376,16 @@ When the backend uses the service-role to write on the user's behalf, it must ex
 await supabase.rpc("set_request_user", {"user_id": str(user_id)}).execute()
 ```
 
-(Or equivalent `SET LOCAL request.jwt.claim.sub = ...` via a wrapper RPC.) Worth a 2-hour spike in week 1 to confirm the pattern works end-to-end.
+**Spike result (2026-05-02 — see [`migrations/spike_results/audit_trigger_user_id_capture.md`](../../../migrations/spike_results/audit_trigger_user_id_capture.md)):** The above pattern does **not** work via supabase-py. PostgREST terminates each REST call as its own Postgres transaction, and `set_config(..., true)` is transaction-local — so calling `set_request_user` then `.insert()` produces `audit_log.user_id = NULL`.
+
+**Phase A is NOT affected** because all writes in Phase A come from the frontend (with the user's JWT, where PostgREST sets `request.jwt.claim.sub` automatically within the same request transaction).
+
+**Phase C will need one of three fixes for backend writes:**
+1. Accept NULL `user_id` for backend-originated audit rows (the row itself has `run_by`/`uploaded_by`/`created_by` as the actor record). Recommended for MVP.
+2. Wrap each backend write in a Postgres function that does `set_config` + INSERT atomically.
+3. Modify the audit trigger to fall back to `NEW.run_by` / `NEW.uploaded_by` / `NEW.created_by` when the JWT claim is missing.
+
+Decision deferred to Phase C planning.
 
 ## 7. The reconciliation flow
 
