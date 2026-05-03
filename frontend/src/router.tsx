@@ -4,6 +4,8 @@ import { AppShell } from "@/components/layout/AppShell"
 import { AuthLayout } from "@/components/layout/AuthLayout"
 import { RequireAuth } from "@/components/RequireAuth"
 import { RequireTenant } from "@/components/RequireTenant"
+import { ClientDetail } from "@/pages/ClientDetail"
+import { Clients } from "@/pages/Clients"
 import { Dashboard } from "@/pages/Dashboard"
 import { Login } from "@/pages/Login"
 import { Onboard } from "@/pages/Onboard"
@@ -31,6 +33,25 @@ export const router = createBrowserRouter([
       </RequireAuth>
     ),
   },
-  // /clients route added in Phase B
+  {
+    path: "/clients",
+    element: (
+      <RequireAuth>
+        <RequireTenant>
+          <AppShell><Clients /></AppShell>
+        </RequireTenant>
+      </RequireAuth>
+    ),
+  },
+  {
+    path: "/clients/:id",
+    element: (
+      <RequireAuth>
+        <RequireTenant>
+          <AppShell><ClientDetail /></AppShell>
+        </RequireTenant>
+      </RequireAuth>
+    ),
+  },
   { path: "*", element: <Navigate to="/login" replace /> },
 ])
