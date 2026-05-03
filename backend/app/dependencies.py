@@ -3,8 +3,12 @@ HishabAI Backend — FastAPI Dependencies
 
 Shared dependencies for auth, tenant resolution, and database access.
 Auth is validated against Supabase JWT.
+
+IMPORTANT: supabase-py is sync. Every supabase client call inside an async
+function MUST be wrapped in asyncio.to_thread to avoid blocking the event loop.
 """
 
+import asyncio
 from typing import Any
 from uuid import UUID
 
@@ -18,10 +22,7 @@ from app.database import get_supabase_admin
 async def get_current_user(
     authorization: str = Header(..., description="Bearer <supabase_jwt>"),
 ) -> dict[str, Any]:
-    """
-    Validates the Supabase JWT from the Authorization header.
-    Returns the decoded payload with user ID and metadata.
-    """
+    """Validates the Supabase JWT from the Authorization header. Returns decoded payload."""
     if not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -42,10 +43,10 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "UNAUTHORIZED", "message": "Token expired"},
         )
-    except jwt.InvalidTokenError as e:
+    except jwt.InvalidTokenError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "UNAUTHORIZED", "message": f"Invalid token: {e}"},
+            detail={"code": "UNAUTHORIZED", "message": f"Invalid token: {exc}"},
         )
 
     return payload
@@ -64,15 +65,21 @@ async def get_current_tenant_id(
     """
     Looks up the tenant_id for the authenticated user from user_profiles.
     Raises 403 if user has no tenant association.
+
+    The supabase-py call is sync, so we wrap it in asyncio.to_thread.
     """
     supabase = get_supabase_admin()
-    result = (
-        supabase.table("user_profiles")
-        .select("tenant_id")
-        .eq("id", str(user_id))
-        .single()
-        .execute()
-    )
+
+    def _query() -> Any:
+        return (
+            supabase.table("user_profiles")
+            .select("tenant_id")
+            .eq("id", str(user_id))
+            .single()
+            .execute()
+        )
+
+    result = await asyncio.to_thread(_query)
 
     if not result.data or not result.data.get("tenant_id"):
         raise HTTPException(
@@ -87,22 +94,23 @@ async def get_current_tenant_id(
 
 
 def require_role(*allowed_roles: str):
-    """
-    Dependency factory: restricts endpoint to specific user roles.
-    Usage: Depends(require_role("firm_admin", "senior_ca"))
-    """
+    """Dependency factory: restricts endpoint to specific user roles."""
 
     async def _check_role(
         user_id: UUID = Depends(get_current_user_id),
     ) -> str:
         supabase = get_supabase_admin()
-        result = (
-            supabase.table("user_profiles")
-            .select("role")
-            .eq("id", str(user_id))
-            .single()
-            .execute()
-        )
+
+        def _query() -> Any:
+            return (
+                supabase.table("user_profiles")
+                .select("role")
+                .eq("id", str(user_id))
+                .single()
+                .execute()
+            )
+
+        result = await asyncio.to_thread(_query)
 
         if not result.data:
             raise HTTPException(
@@ -116,7 +124,10 @@ def require_role(*allowed_roles: str):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={
                     "code": "FORBIDDEN",
-                    "message": f"Role '{role}' does not have access. Required: {', '.join(allowed_roles)}",
+                    "message": (
+                        f"Role '{role}' does not have access. "
+                        f"Required: {', '.join(allowed_roles)}"
+                    ),
                 },
             )
         return role
