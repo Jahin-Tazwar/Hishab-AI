@@ -1730,8 +1730,13 @@ async def test_set_request_user_calls_rpc_via_to_thread() -> None:
     mock_supabase = MagicMock()
     mock_supabase.rpc.return_value.execute.return_value = MagicMock()
 
+    # Side effect that actually invokes the wrapped callable, mirroring real asyncio.to_thread.
+    # Without this, the inner closure never runs and mock_supabase.rpc is never called.
+    async def _side_effect(fn, *args, **kwargs):
+        fn()
+
     with patch("app.dependencies.get_supabase_admin", return_value=mock_supabase), \
-         patch("app.dependencies.asyncio.to_thread", new=AsyncMock()) as to_thread:
+         patch("app.dependencies.asyncio.to_thread", new=AsyncMock(side_effect=_side_effect)) as to_thread:
         await set_request_user(user_id)
         assert to_thread.called
         # The wrapped function should call .rpc("set_request_user", {"p_user_id": ...})
