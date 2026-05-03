@@ -71,3 +71,25 @@ async def test_get_current_tenant_id_does_not_block_event_loop() -> None:
         result = await get_current_tenant_id(user_id=user_id)
         assert result == tenant_id
         assert to_thread.called, "Expected asyncio.to_thread to wrap the sync supabase call"
+
+
+@pytest.mark.asyncio
+async def test_set_request_user_calls_rpc_via_to_thread() -> None:
+    """set_request_user must call the Supabase RPC asynchronously."""
+    from app.dependencies import set_request_user
+
+    user_id = uuid4()
+    mock_supabase = MagicMock()
+    mock_supabase.rpc.return_value.execute.return_value = MagicMock()
+
+    async def _side_effect(fn, *args, **kwargs):
+        fn()
+
+    with patch("app.dependencies.get_supabase_admin", return_value=mock_supabase), \
+         patch("app.dependencies.asyncio.to_thread", new=AsyncMock(side_effect=_side_effect)) as to_thread:
+        await set_request_user(user_id)
+        assert to_thread.called
+        # The wrapped function should call .rpc("set_request_user", {"p_user_id": ...})
+        call = mock_supabase.rpc.call_args
+        assert call.args[0] == "set_request_user"
+        assert call.args[1] == {"p_user_id": str(user_id)}

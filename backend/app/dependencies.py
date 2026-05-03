@@ -133,3 +133,21 @@ def require_role(*allowed_roles: str):
         return role
 
     return _check_role
+
+
+async def set_request_user(user_id: UUID) -> None:
+    """
+    Sets the request.jwt.claim.sub Postgres setting via the set_request_user RPC.
+
+    Backend MUST call this before any service-role write so the audit trigger
+    captures the correct user_id. Effective only within the same transaction —
+    keep the subsequent write in the same supabase-py client session.
+
+    See migrations/0006_set_request_user.sql.
+    """
+    supabase = get_supabase_admin()
+
+    def _call() -> None:
+        supabase.rpc("set_request_user", {"p_user_id": str(user_id)}).execute()
+
+    await asyncio.to_thread(_call)
