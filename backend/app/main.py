@@ -4,15 +4,36 @@ HishabAI Backend — FastAPI Application Factory
 Main entry point. Registers routers, middleware, exception handlers, and health checks.
 """
 
+import asyncio
+import uuid
+
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
 from app.core.exceptions import HishabError
+from app.database import get_supabase_admin
 
 logger = structlog.get_logger()
+
+
+class RequestIdMiddleware(BaseHTTPMiddleware):
+    """Attach a unique request_id to every request and response."""
+
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        request.state.request_id = request_id
+        # Bind to structlog context so all logs in this request carry the id
+        structlog.contextvars.bind_contextvars(request_id=request_id)
+        try:
+            response = await call_next(request)
+            response.headers["X-Request-ID"] = request_id
+            return response
+        finally:
+            structlog.contextvars.clear_contextvars()
 
 
 def create_app() -> FastAPI:
@@ -26,7 +47,9 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if settings.ENVIRONMENT == "development" else None,
     )
 
-    # ── CORS ──────────────────────────────────────────────────────────────
+    # ── Middleware (registered in reverse order of execution) ─────────────
+    app.add_middleware(RequestIdMiddleware)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -42,7 +65,6 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(HishabError)
     async def hishab_error_handler(request: Request, exc: HishabError) -> JSONResponse:
-        """Convert HishabError exceptions to standard API error responses."""
         logger.warning(
             "api_error",
             code=exc.code,
@@ -53,17 +75,12 @@ def create_app() -> FastAPI:
             status_code=exc.status_code,
             content={
                 "success": False,
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "details": exc.details,
-                },
+                "error": {"code": exc.code, "message": exc.message, "details": exc.details},
             },
         )
 
     @app.exception_handler(Exception)
     async def generic_error_handler(request: Request, exc: Exception) -> JSONResponse:
-        """Catch-all: log full traceback internally, return safe message to client."""
         logger.exception(
             "unhandled_error",
             path=request.url.path,
@@ -90,33 +107,20 @@ def create_app() -> FastAPI:
 
     @app.get("/ready", tags=["system"])
     async def readiness_check():
-        """Readiness check — verifies database connectivity."""
-        from app.database import get_supabase_admin
+        """Readiness check — verifies database connectivity (async-safe)."""
         try:
             supabase = get_supabase_admin()
-            # Simple query to verify DB is reachable
-            supabase.table("tenants").select("id").limit(1).execute()
+            # Wrap sync supabase call in to_thread to avoid blocking the event loop
+            await asyncio.to_thread(
+                lambda: supabase.table("tenants").select("id").limit(1).execute()
+            )
             return {"status": "ready", "database": "connected"}
-        except Exception as e:
-            logger.error("readiness_check_failed", error=str(e))
+        except Exception as exc:
+            logger.error("readiness_check_failed", error=str(exc))
             return JSONResponse(
                 status_code=503,
                 content={"status": "not_ready", "database": "disconnected"},
             )
-
-    # ── Register Routers ──────────────────────────────────────────────────
-    # These will be added as we build each module:
-    # from app.tenants.router import router as tenants_router
-    # from app.clients.router import router as clients_router
-    # from app.documents.router import router as documents_router
-    # from app.reconciliation.router import router as reconciliation_router
-    # from app.notices.router import router as notices_router
-    # from app.calendar.router import router as calendar_router
-    # from app.reports.router import router as reports_router
-
-    # app.include_router(tenants_router, prefix="/api/v1/tenant", tags=["tenant"])
-    # app.include_router(clients_router, prefix="/api/v1/clients", tags=["clients"])
-    # ...
 
     return app
 
