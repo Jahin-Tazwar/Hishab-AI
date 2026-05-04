@@ -124,3 +124,47 @@ class PlanLimitExceededError(HishabError):
             f"Plan limit exceeded: {limit_type}" if limit_type else "Plan limit exceeded",
             429,
         )
+
+
+# ── Reconciliation Errors (Phase C) ──────────────────────────────────────
+
+
+class InvalidXlsxFormatError(HishabError):
+    def __init__(self, file_label: str, missing_columns: list[str]) -> None:
+        cols = ", ".join(missing_columns)
+        super().__init__(
+            "INVALID_XLSX_FORMAT",
+            f"{file_label} is missing required columns: {cols}",
+            status_code=400,
+            details={"file_label": file_label, "missing_columns": missing_columns},
+        )
+
+
+class ReconciliationAlreadyExistsError(HishabError):
+    def __init__(self, reconciliation_id: str) -> None:
+        super().__init__(
+            "RECONCILIATION_ALREADY_EXISTS",
+            "A reconciliation already exists for this client and period.",
+            status_code=409,
+            details={"reconciliation_id": reconciliation_id},
+        )
+
+
+class StorageDownloadFailedError(HishabError):
+    def __init__(self, path: str, reason: str) -> None:
+        super().__init__(
+            "STORAGE_DOWNLOAD_FAILED",
+            f"Could not download {path}: {reason}",
+            status_code=502,
+            details={"path": path, "reason": reason},
+        )
+
+
+class DocumentTenantMismatchError(HishabError):
+    def __init__(self, document_id: str) -> None:
+        super().__init__(
+            "DOCUMENT_TENANT_MISMATCH",
+            "Document does not belong to the authenticated tenant.",
+            status_code=403,
+            details={"document_id": document_id},
+        )
