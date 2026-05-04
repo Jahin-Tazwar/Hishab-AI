@@ -126,3 +126,18 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+
+if __name__ == "__main__":
+    # Allow `python -m app.main` from the `backend/` directory.
+    # For day-to-day dev prefer: `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
+    # Note: `python app/main.py` will NOT work — Python can't resolve the `app.*` package
+    # imports when main.py is run as a top-level script. Always run from `backend/` as a module.
+    import uvicorn
+
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=settings.ENVIRONMENT == "development",
+    )

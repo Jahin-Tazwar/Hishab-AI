@@ -38,41 +38,33 @@ export function Onboard() {
     }
     setSubmitting(true)
 
-    // 1. Create the tenant. RLS allows authenticated users to insert.
-    const { data: tenant, error: tenantError } = await supabase
-      .from("tenants")
-      .insert({
-        firm_name: values.firmName,
-        email: user.email!,
-      })
-      .select()
-      .single()
+    // Atomic onboarding via SECURITY DEFINER RPC.
+    // Creates the tenant AND the user_profile in a single transaction,
+    // sidestepping the chicken-and-egg RLS situation (no tenant_id on user_profile yet)
+    // and avoiding orphan tenants if the second insert fails.
+    const { data: tenant, error } = await supabase.rpc("create_tenant_for_user", {
+      p_firm_name: values.firmName,
+      p_full_name: values.fullName,
+    })
 
-    if (tenantError) {
+    if (error || !tenant) {
       setSubmitting(false)
-      toast.error(`Could not create firm: ${tenantError.message}`)
+      toast.error(`Could not create firm: ${error?.message ?? "no tenant returned"}`)
       return
     }
 
-    // 2. Create the user_profile linking auth.user → tenant
-    const { error: profileError } = await supabase
-      .from("user_profiles")
-      .insert({
-        id: user.id,
-        tenant_id: tenant.id,
-        full_name: values.fullName,
-        role: "firm_admin",
-      })
+    // Seed the user_profile cache BEFORE navigating so RequireTenant doesn't
+    // see the stale `null` profile and bounce us back to /onboard.
+    queryClient.setQueryData(["user_profile", user.id], {
+      id: user.id,
+      tenant_id: tenant.id,
+      full_name: values.fullName,
+      role: "firm_admin",
+      created_at: tenant.created_at ?? new Date().toISOString(),
+    })
 
     setSubmitting(false)
-
-    if (profileError) {
-      toast.error(`Could not create profile: ${profileError.message}`)
-      return
-    }
-
     toast.success(`Welcome, ${values.fullName}!`)
-    queryClient.invalidateQueries({ queryKey: ["user_profile"] })
     navigate("/dashboard")
   }
 
