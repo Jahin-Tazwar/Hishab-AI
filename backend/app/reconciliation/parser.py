@@ -4,7 +4,6 @@ from __future__ import annotations
 import io
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Iterable
 
 import pandas as pd
 
