@@ -115,6 +115,13 @@ def create_app() -> FastAPI:
         from app import __version__
         return {"status": "healthy", "service": "hishabai-api", "version": __version__}
 
+    # For Uptime Robot
+    @app.head("/health", tags=["system"])
+    async def health_check():
+        """Basic health check — returns 200 if the server is running."""
+        from app import __version__
+        return {"status": "healthy", "service": "hishabai-api", "version": __version__}
+
     @app.get("/ready", tags=["system"])
     async def readiness_check():
         """Readiness check — verifies database connectivity (async-safe)."""
