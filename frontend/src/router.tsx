@@ -9,6 +9,7 @@ import { ClientDetail } from "@/pages/ClientDetail"
 import { Clients } from "@/pages/Clients"
 import { Dashboard } from "@/pages/Dashboard"
 import { Login } from "@/pages/Login"
+import { NotFound } from "@/pages/NotFound"
 import { Onboard } from "@/pages/Onboard"
 import { ReconNew } from "@/pages/ReconNew"
 import { ReconReport } from "@/pages/ReconReport"
@@ -86,5 +87,5 @@ export const router = createBrowserRouter([
       </RequireAuth>
     ),
   },
-  { path: "*", element: <Navigate to="/login" replace /> },
+  { path: "*", element: <NotFound /> },
 ])
