@@ -9,6 +9,8 @@ import { Clients } from "@/pages/Clients"
 import { Dashboard } from "@/pages/Dashboard"
 import { Login } from "@/pages/Login"
 import { Onboard } from "@/pages/Onboard"
+import { ReconNew } from "@/pages/ReconNew"
+import { ReconReport } from "@/pages/ReconReport"
 import { Signup } from "@/pages/Signup"
 
 export const router = createBrowserRouter([
@@ -49,6 +51,26 @@ export const router = createBrowserRouter([
       <RequireAuth>
         <RequireTenant>
           <AppShell><ClientDetail /></AppShell>
+        </RequireTenant>
+      </RequireAuth>
+    ),
+  },
+  {
+    path: "/clients/:id/recon/new",
+    element: (
+      <RequireAuth>
+        <RequireTenant>
+          <AppShell><ReconNew /></AppShell>
+        </RequireTenant>
+      </RequireAuth>
+    ),
+  },
+  {
+    path: "/clients/:id/recon/:reconId",
+    element: (
+      <RequireAuth>
+        <RequireTenant>
+          <AppShell><ReconReport /></AppShell>
         </RequireTenant>
       </RequireAuth>
     ),
