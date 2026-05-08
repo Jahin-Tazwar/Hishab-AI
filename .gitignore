@@ -25,4 +25,3 @@ venv/
 env/
 *.tsbuildinfo
 .playwright-mcp/
-CLAUDE.md
