@@ -1,4 +1,6 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { OverdueClientsWidget } from "@/components/compliance/OverdueClientsWidget"
+import { RecentReconciliationsWidget } from "@/components/compliance/RecentReconciliationsWidget"
+import { UpcomingDeadlinesWidget } from "@/components/compliance/UpcomingDeadlinesWidget"
 import { useUserProfile } from "@/hooks/useUserProfile"
 
 export function Dashboard() {
@@ -12,21 +14,16 @@ export function Dashboard() {
           {profile?.full_name ? `Welcome back, ${profile.full_name}.` : "Welcome to HishabAI."}
         </p>
       </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>You're all set</CardTitle>
-          <CardDescription>
-            Your firm is created. Next, add clients and run your first reconciliation.
-            (Clients and Reconciliation modules ship in Phase B–C.)
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-slate-600">
-            For now, this empty dashboard confirms that auth, tenant creation, and RLS
-            isolation are all working.
-          </p>
-        </CardContent>
-      </Card>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <UpcomingDeadlinesWidget />
+        </div>
+        <div className="space-y-4">
+          <OverdueClientsWidget />
+          <RecentReconciliationsWidget />
+        </div>
+      </div>
     </div>
   )
 }
