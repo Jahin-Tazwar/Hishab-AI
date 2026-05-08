@@ -168,11 +168,45 @@ def _ensure_clients(tenant_id: UUID, created_by: UUID) -> list[UUID]:
     return ids
 
 
+def _generate_events_for_client(client_id: UUID, tenant_id: UUID) -> int:
+    """
+    Calls the generate_compliance_events RPC for one client over the
+    next 90 days. Returns the number of events generated (or 0 if the
+    RPC is idempotent and they already exist).
+
+    NOTE: the RPC's actual signature is (p_client_id, p_from_date, p_to_date)
+    — the plan's `p_window_start/p_window_end/p_tenant_id` arg names don't
+    match. The function reads tenant_id from the clients row internally.
+    """
+    from datetime import date, timedelta
+    supabase = get_supabase_admin()
+    today = date.today()
+    end = today + timedelta(days=90)
+    res = supabase.rpc(
+        "generate_compliance_events",
+        {
+            "p_client_id": str(client_id),
+            "p_from_date": today.isoformat(),
+            "p_to_date": end.isoformat(),
+        },
+    ).execute()
+    n = res.data if isinstance(res.data, int) else (res.data or 0)
+    log.info(
+        "seed.events_generated",
+        client_id=str(client_id),
+        tenant_id=str(tenant_id),
+        count=n,
+    )
+    return int(n)
+
+
 async def seed(email: str, password: str | None) -> None:
     user_id = _ensure_auth_user(email, password)
     tenant_id = _ensure_tenant()
     _ensure_user_profile(user_id, tenant_id)
     client_ids = _ensure_clients(tenant_id, user_id)
+    for cid in client_ids:
+        _generate_events_for_client(cid, tenant_id)
     log.info(
         "seed.done",
         user_id=str(user_id),
