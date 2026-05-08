@@ -122,6 +122,10 @@ def create_app() -> FastAPI:
                 content={"status": "not_ready", "database": "disconnected"},
             )
 
+    # ── Routers ───────────────────────────────────────────────────────────
+    from app.reconciliation.router import router as reconciliation_router
+    app.include_router(reconciliation_router)
+
     return app
 
 
