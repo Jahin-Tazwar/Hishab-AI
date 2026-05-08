@@ -1,18 +1,21 @@
 /**
- * Group items by which of the next four weeks their date falls in,
- * using a Monday-start week convention.
+ * Group items by where their date falls in the next 30 days, using a
+ * Monday-start week convention for the first two buckets.
  *
  * Buckets:
- *   thisWeek            — today through Sunday of this week
- *   nextWeek            — Monday-Sunday of the week after
- *   weeksThreeAndFour   — the following 14 days
+ *   thisWeek           — today through Sunday of this week
+ *   nextWeek           — Monday–Sunday of the week after
+ *   laterThisMonth     — everything after that, up to today + 30 days
  *
- * Anything before today or beyond 28 days is dropped.
+ * Anything before today (midnight) or beyond 30 days is dropped. The
+ * 30-day cap matches the "next 30 days" promise made by the upstream
+ * `useUpcomingEvents(30)` query — the previous 4-week cap silently
+ * dropped events on days 24–30 when today wasn't a Sunday.
  */
 export interface WeekBuckets<T> {
   thisWeek: T[]
   nextWeek: T[]
-  weeksThreeAndFour: T[]
+  laterThisMonth: T[]
 }
 
 function _toMidnight(d: Date): Date {
@@ -39,19 +42,19 @@ export function groupByWeek<T>(
   const start = _toMidnight(today).getTime()
   const endThis = _endOfThisWeek(today).getTime()
   const endNext = endThis + 7 * 86_400_000
-  const endFour = endThis + 21 * 86_400_000
+  const end30 = start + 30 * 86_400_000
 
   const buckets: WeekBuckets<T> = {
     thisWeek: [],
     nextWeek: [],
-    weeksThreeAndFour: [],
+    laterThisMonth: [],
   }
   for (const it of items) {
     const ts = _toMidnight(new Date(getDate(it))).getTime()
     if (ts < start) continue
     if (ts <= endThis) buckets.thisWeek.push(it)
     else if (ts <= endNext) buckets.nextWeek.push(it)
-    else if (ts <= endFour) buckets.weeksThreeAndFour.push(it)
+    else if (ts <= end30) buckets.laterThisMonth.push(it)
   }
   return buckets
 }

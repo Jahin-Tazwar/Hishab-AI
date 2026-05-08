@@ -11,7 +11,7 @@ describe("groupByWeek", () => {
     const r = groupByWeek<T>([], today, (e) => e.due_date)
     expect(r.thisWeek).toEqual([])
     expect(r.nextWeek).toEqual([])
-    expect(r.weeksThreeAndFour).toEqual([])
+    expect(r.laterThisMonth).toEqual([])
   })
 
   it("places today in thisWeek", () => {
@@ -32,25 +32,30 @@ describe("groupByWeek", () => {
     expect(r.nextWeek).toHaveLength(1)
   })
 
-  it("places weeks 3 and 4 (days 14-27 from today) in weeksThreeAndFour", () => {
+  it("places days 14-30 from today in laterThisMonth", () => {
     const r = groupByWeek<T>(
-      [{ due_date: "2024-06-24" }, { due_date: "2024-07-07" }],
+      [
+        { due_date: "2024-06-24" }, // day 14
+        { due_date: "2024-07-07" }, // day 27
+        { due_date: "2024-07-10" }, // day 30 — formerly dropped, now included
+      ],
       today,
       (e) => e.due_date,
     )
-    // Jun 24 = day 14 → weeksThreeAndFour
-    // Jul 7  = day 27 → weeksThreeAndFour
-    expect(r.weeksThreeAndFour).toHaveLength(2)
+    expect(r.laterThisMonth).toHaveLength(3)
   })
 
-  it("ignores past dates and dates beyond 28 days", () => {
+  it("ignores past dates and dates beyond 30 days", () => {
     const r = groupByWeek<T>(
-      [{ due_date: "2024-06-09" }, { due_date: "2024-07-09" }],
+      [
+        { due_date: "2024-06-09" }, // yesterday
+        { due_date: "2024-07-11" }, // day 31
+      ],
       today,
       (e) => e.due_date,
     )
     expect(r.thisWeek).toHaveLength(0)
     expect(r.nextWeek).toHaveLength(0)
-    expect(r.weeksThreeAndFour).toHaveLength(0)
+    expect(r.laterThisMonth).toHaveLength(0)
   })
 })

@@ -30,7 +30,7 @@ export function UpcomingDeadlinesWidget() {
           <>
             <Section title="This week" rows={buckets.thisWeek} today={today} />
             <Section title="Next week" rows={buckets.nextWeek} today={today} />
-            <Section title="Weeks 3–4" rows={buckets.weeksThreeAndFour} today={today} />
+            <Section title="Later this month" rows={buckets.laterThisMonth} today={today} />
           </>
         )}
       </CardContent>
