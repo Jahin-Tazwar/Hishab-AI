@@ -38,6 +38,9 @@ SF_HEADERS = [
     "VAT Amount (BDT)",
 ]
 
+# Period: previous calendar month relative to seeder run. Generator uses a
+# fixed date so the fixture is reproducible; the seeder picks period_start /
+# period_end at run time and doesn't read these dates from the XLSX itself.
 PERIOD_START = date(2026, 4, 1)
 SUPPLIERS = [
     ("123456789", "Bashundhara Industries Ltd"),
@@ -46,7 +49,6 @@ SUPPLIERS = [
     ("456789012", "Apex Footwear"),
     ("567890123", "Pran-RFL Group"),
 ]
-BUYER_BIN = "999888777"
 
 
 def _build_register_rows() -> list[list[object]]:
@@ -56,6 +58,14 @@ def _build_register_rows() -> list[list[object]]:
         invoice_date = PERIOD_START + timedelta(days=i)
         taxable = Decimal("10000") + Decimal(i) * Decimal("250")
         vat = (taxable * Decimal("0.15")).quantize(Decimal("0.01"))
+        # Rows 25/26: use a supplier_bin that does NOT appear in the SF pool
+        # at all. This produces NO_MATCH (matcher: "supplier_bin_not_filed").
+        if i == 25:
+            sup_bin = "888777666"
+            sup_name = "Off-Pool Supplier A"
+        elif i == 26:
+            sup_bin = "888777555"
+            sup_name = "Off-Pool Supplier B"
         # Rows 29/30 fuzzy name: tweak the supplier name slightly so the supplier
         # export will have the canonical version. Match still happens via BIN
         # + amount but with status=fuzzy.
@@ -73,21 +83,38 @@ def _build_register_rows() -> list[list[object]]:
 
 
 def _build_supplier_rows() -> list[list[object]]:
+    """
+    Build the supplier-filed export.
+
+    NOTE on the `Buyer BIN` column: the matcher indexes the supplier-export
+    pool by `buyer_bin` and looks up `pr.supplier_bin` against it. So for a
+    row to be matchable, the SF row's buyer_bin MUST equal the PR row's
+    supplier_bin. (The earlier fixture used a single hardcoded BUYER_BIN,
+    which produced 30/30 NO_MATCH at run time — fixed here.)
+    """
     rows: list[list[object]] = [SF_HEADERS]
     for i in range(1, 31):
-        # Skip 25, 26 — these stay only in the register => no_match
+        # Skip 25, 26 — these stay only in the register (and use an off-pool
+        # BIN there) => no_match.
         if i in (25, 26):
             continue
         sup_bin, _ = SUPPLIERS[(i - 1) % len(SUPPLIERS)]
         invoice_date = PERIOD_START + timedelta(days=i)
         taxable = Decimal("10000") + Decimal(i) * Decimal("250")
         vat = (taxable * Decimal("0.15")).quantize(Decimal("0.01"))
-        # Rows 23, 24: bump VAT 5% above register => partial/amount-mismatch
+        # Rows 23, 24: filed under a *different* invoice_no — same BIN, same
+        # supplier, slightly different identifier. Matcher will report
+        # PARTIAL ("bin matched but invoice did not").
+        invoice_no = f"INV-{i:04d}"
         if i in (23, 24):
-            vat = (vat * Decimal("1.05")).quantize(Decimal("0.01"))
+            invoice_no = f"INV-{i:04d}-A"
+        # Rows 29, 30: supplier filed the invoice 1 day later than register.
+        # Same invoice_no, same BIN, same amounts, date off by 1 → FUZZY.
+        if i in (29, 30):
+            invoice_date = invoice_date + timedelta(days=1)
         rows.append([
-            f"INV-{i:04d}",
-            BUYER_BIN,
+            invoice_no,
+            sup_bin,
             invoice_date.isoformat(),
             float(taxable),
             float(vat),
@@ -103,7 +130,7 @@ def _build_supplier_rows() -> list[list[object]]:
         vat = (taxable * Decimal("0.15")).quantize(Decimal("0.01"))
         rows.append([
             f"INV-{i:04d}",
-            BUYER_BIN,
+            sup_bin,
             invoice_date.isoformat(),
             float(taxable),
             float(vat),

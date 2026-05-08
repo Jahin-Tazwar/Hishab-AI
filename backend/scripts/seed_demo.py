@@ -200,6 +200,146 @@ def _generate_events_for_client(client_id: UUID, tenant_id: UUID) -> int:
     return int(n)
 
 
+def _upload_fixture(
+    *, tenant_id: UUID, client_id: UUID, user_id: UUID, doc_type: str, fixture_name: str
+) -> UUID:
+    """
+    Upload one fixture XLSX to the recon-files bucket and create a documents row.
+    Returns the document UUID.
+    doc_type: 'purchase_register' or 'supplier_export'
+
+    NOTE: The plan called this argument `file_kind` and used a `file_kind`
+    column on the documents table. The actual schema uses `doc_type` (with a
+    CHECK constraint on the same set of values). Same with
+    `original_filename` (plan said `file_name`) and `file_size_bytes` (plan
+    said `size_bytes`).
+    """
+    from pathlib import Path
+
+    fixture_path = Path(__file__).resolve().parent / "fixtures" / fixture_name
+    if not fixture_path.exists():
+        raise SystemExit(
+            f"Fixture not found: {fixture_path}. "
+            "Run with --regenerate-fixtures first."
+        )
+
+    supabase = get_supabase_admin()
+
+    # Reuse an existing documents row if we've already seeded one for this client.
+    existing = (
+        supabase.table("documents")
+        .select("id")
+        .eq("tenant_id", str(tenant_id))
+        .eq("client_id", str(client_id))
+        .eq("doc_type", doc_type)
+        .like("storage_path", "%/demo-seed/%")
+        .limit(1)
+        .execute()
+    )
+    if existing.data:
+        return UUID(existing.data[0]["id"])
+
+    storage_path = f"{tenant_id}/{client_id}/demo-seed/{fixture_name}"
+    with open(fixture_path, "rb") as f:
+        bytes_ = f.read()
+    # supabase-py's storage upload is sync. upsert handles the case where a
+    # previous failed seed left the object behind without a documents row.
+    try:
+        supabase.storage.from_("recon-files").upload(
+            path=storage_path,
+            file=bytes_,
+            file_options={
+                "upsert": "true",
+                "content-type":
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise SystemExit(
+            f"Failed to upload fixture to recon-files bucket: {exc!r}. "
+            "Confirm the 'recon-files' bucket exists in your Supabase project "
+            "(migrations/0011_storage_buckets.sql creates it)."
+        ) from exc
+    inserted = supabase.table("documents").insert({
+        "tenant_id": str(tenant_id),
+        "client_id": str(client_id),
+        "uploaded_by": str(user_id),
+        "original_filename": fixture_name,
+        "doc_type": doc_type,
+        "storage_path": storage_path,
+        "file_size_bytes": len(bytes_),
+        "mime_type":
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }).execute()
+    doc_id = UUID(inserted.data[0]["id"])
+    log.info(
+        "seed.fixture_uploaded",
+        client_id=str(client_id),
+        kind=doc_type,
+        doc_id=str(doc_id),
+    )
+    return doc_id
+
+
+async def _seed_reconciliation(
+    *, tenant_id: UUID, client_id: UUID, user_id: UUID
+) -> UUID | None:
+    """
+    Run a reconciliation for the previous calendar month. Skips if a recon
+    already exists for this (client, period). Returns the recon UUID or None.
+    """
+    from datetime import date
+    from app.reconciliation.schemas import ReconciliationCreateRequest
+    from app.reconciliation.service import run_reconciliation
+
+    today = date.today()
+    if today.month == 1:
+        period_start = date(today.year - 1, 12, 1)
+        period_end = date(today.year - 1, 12, 31)
+    else:
+        from calendar import monthrange
+        period_start = date(today.year, today.month - 1, 1)
+        last_day = monthrange(today.year, today.month - 1)[1]
+        period_end = date(today.year, today.month - 1, last_day)
+
+    supabase = get_supabase_admin()
+    # NOTE: table is `vat_reconciliations` (plan said `reconciliations`).
+    existing = (
+        supabase.table("vat_reconciliations")
+        .select("id")
+        .eq("tenant_id", str(tenant_id))
+        .eq("client_id", str(client_id))
+        .eq("period_start", period_start.isoformat())
+        .eq("period_end", period_end.isoformat())
+        .limit(1)
+        .execute()
+    )
+    if existing.data:
+        rid = UUID(existing.data[0]["id"])
+        log.info("seed.recon_exists", reconciliation_id=str(rid))
+        return rid
+
+    pr_doc_id = _upload_fixture(
+        tenant_id=tenant_id, client_id=client_id, user_id=user_id,
+        doc_type="purchase_register", fixture_name="demo_register.xlsx",
+    )
+    sf_doc_id = _upload_fixture(
+        tenant_id=tenant_id, client_id=client_id, user_id=user_id,
+        doc_type="supplier_export", fixture_name="demo_supplier.xlsx",
+    )
+
+    req = ReconciliationCreateRequest(
+        client_id=client_id,
+        period_start=period_start,
+        period_end=period_end,
+        purchase_register_doc_id=pr_doc_id,
+        supplier_data_doc_id=sf_doc_id,
+    )
+    recon_id = await run_reconciliation(req, tenant_id=tenant_id, user_id=user_id)
+    log.info("seed.recon_created", reconciliation_id=str(recon_id))
+    return recon_id
+
+
 async def seed(email: str, password: str | None) -> None:
     user_id = _ensure_auth_user(email, password)
     tenant_id = _ensure_tenant()
@@ -207,6 +347,12 @@ async def seed(email: str, password: str | None) -> None:
     client_ids = _ensure_clients(tenant_id, user_id)
     for cid in client_ids:
         _generate_events_for_client(cid, tenant_id)
+    # Only seed a recon for the first client (Acme Textiles)
+    await _seed_reconciliation(
+        tenant_id=tenant_id,
+        client_id=client_ids[0],
+        user_id=user_id,
+    )
     log.info(
         "seed.done",
         user_id=str(user_id),
