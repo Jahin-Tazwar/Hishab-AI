@@ -114,14 +114,14 @@ export function ReconNew() {
             file={prFile}
             onChange={setPrFile}
             disabled={submitting}
-            helpText="Required columns: invoice_no, supplier_bin, supplier_name, invoice_date, taxable_amount_bdt, vat_amount_bdt"
+            helpText="Required columns: Invoice No, Supplier BIN, Supplier Name, Invoice Date, Taxable Amount (BDT), VAT Amount (BDT)"
           />
           <FileDropzone
             label="Supplier-filed export"
             file={sfFile}
             onChange={setSfFile}
             disabled={submitting}
-            helpText="Required columns: invoice_no, invoice_date, taxable_amount_bdt, vat_amount_bdt, buyer_bin"
+            helpText="Required columns: Invoice No, Invoice Date, Taxable Amount (BDT), VAT Amount (BDT), Buyer BIN"
           />
           <p className="text-xs text-slate-500">
             Need a starter file? Download:{" "}
