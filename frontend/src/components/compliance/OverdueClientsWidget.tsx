@@ -2,6 +2,7 @@
 import { Link } from "react-router-dom"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Spinner } from "@/components/ui/Loading"
 import { useOverdueByClient } from "@/hooks/useCompliance"
 
 export function OverdueClientsWidget() {
@@ -14,7 +15,9 @@ export function OverdueClientsWidget() {
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <Spinner /> Loading…
+          </div>
         ) : !data || data.length === 0 ? (
           <p className="text-sm text-slate-500">No overdue items. 🎉</p>
         ) : (

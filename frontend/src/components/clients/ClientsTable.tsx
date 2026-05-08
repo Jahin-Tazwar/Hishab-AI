@@ -6,6 +6,7 @@ import { DeleteClientDialog } from "@/components/clients/DeleteClientDialog"
 import { EditClientDialog } from "@/components/clients/EditClientDialog"
 import { EntityTypeBadge } from "@/components/clients/EntityTypeBadge"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/Loading"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,7 +33,11 @@ export function ClientsTable({ clients, isLoading }: Props) {
   const [deleting, setDeleting] = useState<Client | null>(null)
 
   if (isLoading) {
-    return <div className="text-slate-500 py-8 text-center">Loading clients…</div>
+    return (
+      <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-500">
+        <Spinner /> Loading clients…
+      </div>
+    )
   }
 
   if (clients.length === 0) {

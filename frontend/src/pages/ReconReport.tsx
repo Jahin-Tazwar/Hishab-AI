@@ -12,6 +12,7 @@ import { ReconHeroCard } from "@/components/reconciliation/ReconHeroCard"
 import { ReconLineItemsTable } from "@/components/reconciliation/ReconLineItemsTable"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { PageLoading, Spinner } from "@/components/ui/Loading"
 import { useClient } from "@/hooks/useClients"
 import { useReconciliation, useReconLineItems } from "@/hooks/useReconciliations"
 import { ApiError, api } from "@/lib/api"
@@ -60,7 +61,7 @@ export function ReconReport() {
   }
 
   if (reconLoading) {
-    return <div className="p-8 text-slate-500">Loading reconciliation…</div>
+    return <PageLoading label="Loading reconciliation…" />
   }
 
   if (!recon) {
@@ -118,7 +119,9 @@ export function ReconReport() {
           </CardHeader>
           <CardContent>
             {itemsLoading ? (
-              <p className="text-slate-500 text-sm">Loading line items…</p>
+              <div className="flex items-center gap-2 text-sm text-slate-500">
+                <Spinner /> Loading line items…
+              </div>
             ) : (
               <ReconLineItemsTable items={items ?? []} onSelect={openDrawer} />
             )}

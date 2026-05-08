@@ -8,6 +8,7 @@ import { ClientCalendarTab } from "@/components/compliance/ClientCalendarTab"
 import { ClientReconciliationsList } from "@/components/reconciliation/ClientReconciliationsList"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { PageLoading } from "@/components/ui/Loading"
 import { useClient } from "@/hooks/useClients"
 
 export function ClientDetail() {
@@ -17,7 +18,7 @@ export function ClientDetail() {
   const [deleting, setDeleting] = useState(false)
 
   if (isLoading) {
-    return <div className="text-slate-500 p-8">Loading client…</div>
+    return <PageLoading label="Loading client…" />
   }
 
   if (!client) {

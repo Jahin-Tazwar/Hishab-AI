@@ -3,6 +3,7 @@ import { Link } from "react-router-dom"
 
 import { EventStatusBadge } from "@/components/compliance/EventStatusBadge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Spinner } from "@/components/ui/Loading"
 import { useUpcomingEvents } from "@/hooks/useCompliance"
 import { groupByWeek } from "@/lib/groupByWeek"
 import { isOverdue } from "@/lib/isOverdue"
@@ -21,7 +22,9 @@ export function UpcomingDeadlinesWidget() {
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <Spinner /> Loading…
+          </div>
         ) : (data ?? []).length === 0 ? (
           <p className="text-sm text-slate-500">
             No deadlines in the next 30 days. Add a client to populate the calendar.
