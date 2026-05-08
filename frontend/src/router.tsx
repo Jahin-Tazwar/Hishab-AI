@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom"
 
 import { AppShell } from "@/components/layout/AppShell"
 import { AuthLayout } from "@/components/layout/AuthLayout"
+import { RouteBoundary } from "@/components/ErrorBoundary"
 import { RequireAuth } from "@/components/RequireAuth"
 import { RequireTenant } from "@/components/RequireTenant"
 import { ClientDetail } from "@/pages/ClientDetail"
@@ -30,7 +31,9 @@ export const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <RequireTenant>
-          <AppShell><Dashboard /></AppShell>
+          <AppShell>
+            <RouteBoundary><Dashboard /></RouteBoundary>
+          </AppShell>
         </RequireTenant>
       </RequireAuth>
     ),
@@ -40,7 +43,9 @@ export const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <RequireTenant>
-          <AppShell><Clients /></AppShell>
+          <AppShell>
+            <RouteBoundary><Clients /></RouteBoundary>
+          </AppShell>
         </RequireTenant>
       </RequireAuth>
     ),
@@ -50,7 +55,9 @@ export const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <RequireTenant>
-          <AppShell><ClientDetail /></AppShell>
+          <AppShell>
+            <RouteBoundary><ClientDetail /></RouteBoundary>
+          </AppShell>
         </RequireTenant>
       </RequireAuth>
     ),
@@ -60,7 +67,9 @@ export const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <RequireTenant>
-          <AppShell><ReconNew /></AppShell>
+          <AppShell>
+            <RouteBoundary><ReconNew /></RouteBoundary>
+          </AppShell>
         </RequireTenant>
       </RequireAuth>
     ),
@@ -70,7 +79,9 @@ export const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <RequireTenant>
-          <AppShell><ReconReport /></AppShell>
+          <AppShell>
+            <RouteBoundary><ReconReport /></RouteBoundary>
+          </AppShell>
         </RequireTenant>
       </RequireAuth>
     ),
