@@ -37,8 +37,11 @@ export function ClientsTable({ clients, isLoading }: Props) {
 
   if (clients.length === 0) {
     return (
-      <div className="text-slate-500 py-12 text-center border border-dashed rounded">
-        No clients yet. Add your first client using the button above.
+      <div className="rounded-md border border-dashed p-8 text-center">
+        <p className="text-sm text-slate-700">No clients yet.</p>
+        <p className="mt-1 text-xs text-slate-500">
+          Add your first client to start tracking compliance deadlines and running reconciliations.
+        </p>
       </div>
     )
   }
