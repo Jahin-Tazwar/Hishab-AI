@@ -1,84 +1,160 @@
 # HishabAI
 
-Multi-tenant SaaS that automates the pre-advisory workflow of Bangladeshi Chartered Accountancy firms. The MVP focuses on **VAT reconciliation** — uploading purchase register + supplier export XLSX files and computing ITC risk in BDT.
+Multi-tenant SaaS for Bangladeshi Chartered Accountancy firms — VAT
+reconciliation, compliance deadline tracking, and NBR notice drafting.
+This repo holds the backend (FastAPI + Supabase), the frontend (React +
+Vite), and the SQL migrations.
 
-See [`docs/superpowers/specs/`](docs/superpowers/specs/) for the design spec and [`docs/superpowers/plans/`](docs/superpowers/plans/) for implementation plans.
+## Architecture
 
-## Stack
+```
+  ┌────────┐   HTTPS    ┌──────────────┐    HTTPS    ┌──────────┐
+  │ Browser│ ─────────▶ │ React + Vite │ ──────────▶ │ FastAPI  │
+  └────────┘            └──────────────┘             └────┬─────┘
+                                                          │
+                                                          ▼
+                                                   ┌────────────┐
+                                                   │  Supabase  │
+                                                   │ (Postgres, │
+                                                   │  Auth,     │
+                                                   │  Storage)  │
+                                                   └────────────┘
+```
 
-- **Frontend:** React 18 + TypeScript + Vite + Tailwind + shadcn/ui (deployed to Vercel)
-- **Backend:** FastAPI 0.115 (Python 3.11+) (deployed to Cloud Run)
-- **Database / Auth / Storage:** Supabase (PostgreSQL, GoTrue, Storage)
-- **AI:** Deferred to Phase 2 (no LLM in MVP)
+The frontend talks to FastAPI for compute-heavy work (reconciliation
+matching, XLSX export) and directly to Supabase via `@supabase/supabase-js`
+for everything else (auth, reads, simple writes — RLS enforced).
 
-## Local development
+## Tech stack
 
-### Prerequisites
-- Python 3.11+
-- Node.js 20+
-- A Supabase project (existing: `qlrqbqisavkfxywkiuca`, Singapore)
-- Supabase service-role key, anon key, JWT secret
+| Layer | Tools |
+|------|------|
+| Backend | Python 3.11, FastAPI, supabase-py, structlog, pytest |
+| Frontend | React 18, TypeScript, Vite, TanStack Query, Zustand, shadcn/ui, Tailwind, Vitest |
+| Database | Supabase (Postgres 15) with Row-Level Security |
+| Storage | Supabase Storage (buckets `documents` and `recon-files`) |
+| Auth | Supabase Auth (ES256 asymmetric JWTs) |
+| Deploy | Render (backend, Docker), Netlify (frontend) |
 
-### 1. Apply database migrations
+## Local setup
 
-See [`migrations/README.md`](migrations/README.md) for instructions. Apply files `0001` through `0008` in order to your Supabase project.
+Prerequisites: Python 3.11+, Node 20+, a Supabase project.
 
-### 2. Backend
+1. **Clone and install deps**
+   ```bash
+   git clone <this-repo>
+   cd hishabai
+   python -m venv backend/.venv
+   source backend/.venv/bin/activate    # Windows: backend\.venv\Scripts\activate
+   pip install -r backend/requirements.txt
+   cd frontend && npm install && cd ..
+   ```
+
+2. **Configure environment variables**
+   ```bash
+   cp backend/.env.example backend/.env
+   cp frontend/.env.example frontend/.env.local
+   ```
+   Fill in `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+   and `SUPABASE_JWT_SECRET` from your Supabase project settings.
+
+3. **Apply migrations to Supabase**
+
+   Apply every file in `migrations/` in lexical order (13 files, `0001` →
+   `0013`). Easiest path is to paste each file into the SQL Editor on the
+   Supabase dashboard. For automation, point `psql` at your project's
+   connection string:
+   ```bash
+   for f in migrations/*.sql; do psql "$DATABASE_URL" -f "$f"; done
+   ```
+
+4. **Run the backend**
+   ```bash
+   cd backend
+   uvicorn app.main:app --reload --port 8000
+   ```
+
+5. **Run the frontend** (in a second shell)
+   ```bash
+   cd frontend
+   npm run dev
+   ```
+   Visit http://localhost:5173.
+
+## Seeding demo data
+
+For walkthroughs and screenshots, the seeder creates one tenant, three
+clients, 90 days of compliance events, and one reconciliation with eight
+deliberate mismatches:
 
 ```bash
 cd backend
-python -m venv .venv
-source .venv/bin/activate    # or .venv\Scripts\activate on Windows
-pip install -r requirements.txt
-cp .env.example .env
-# Edit .env with real Supabase credentials
-uvicorn app.main:app --reload --port 8000
+python -m scripts.seed_demo --email demo@hishabai.test --password DemoPass123!
 ```
 
-Visit `http://localhost:8000/health` — should return `{"status":"healthy",...}`.
+Re-running with the same email is idempotent. Pass `--reset` to wipe the
+demo tenant and reseed from clean. Pass `--regenerate-fixtures` to re-derive
+the two demo XLSX files from source.
 
-Run tests:
-```bash
-pytest
-```
-
-Run integration tests (requires real Supabase):
-```bash
-pytest --run-integration
-```
-
-### 3. Frontend
+## Tests
 
 ```bash
-cd frontend
-npm install
-cp .env.example .env.local
-# Edit .env.local with real Supabase URL + anon key + backend URL
-npm run dev
+# Backend
+cd backend && pytest -q
+
+# Frontend
+cd frontend && npm test
 ```
 
-Visit `http://localhost:5173`.
+The seeder integration test (`tests/scripts/test_seed_demo.py`) is skipped
+unless `SEED_TEST_SUPABASE_URL` and `SEED_TEST_SUPABASE_SERVICE_ROLE_KEY`
+are set — point those at a disposable project, never prod.
 
-## Deployment
+## Deploy
 
-- **Frontend:** Push to GitHub → connect to Vercel → set env vars (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_URL`) → auto-deploys on push.
-- **Backend:** Build with `gcloud run deploy` against `backend/Dockerfile`. Set env vars from `backend/.env.example`. Region: `asia-southeast1` (Singapore, same as Supabase).
+### Frontend → Netlify
 
-## Phases
+1. Connect this repo to Netlify. Netlify auto-detects `netlify.toml`.
+2. In Site Settings → Environment, set `VITE_SUPABASE_URL`,
+   `VITE_SUPABASE_ANON_KEY`, and `VITE_API_URL` (the Render-deployed
+   backend URL — see below).
+3. After the first successful deploy, copy the site URL.
 
-- ✅ **Phase A** — Foundation (schema, RLS, audit, auth, onboarding) — current
-- ⏳ **Phase B** — Clients module
-- ⏳ **Phase C** — Reconciliation engine + report (the hero)
-- ⏳ **Phase D** — Compliance calendar + dashboard
-- ⏳ **Phase E** — Polish + ship
+### Backend → Render
 
-## Naming conventions (Bangladesh-specific)
+1. In the Render dashboard → New → Blueprint, point at this repo. Render
+   reads `render.yaml`.
+2. Render will prompt for the secret env vars marked `sync: false`:
+   `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+   `SUPABASE_JWT_SECRET`, `FRONTEND_ORIGIN` (paste the Netlify URL).
+3. After the first deploy, copy the Render service URL into `VITE_API_URL`
+   on Netlify and redeploy the frontend.
 
-- `tin` — 12-digit Taxpayer ID
-- `bin` — 9-digit Business ID (VAT)
-- `mushak_no` — MushaK form number
-- `nbr` — National Board of Revenue (always uppercase)
-- `bdt` — suffix for BDT-denominated monetary fields
-- Currency: `৳ 12,34,567.89` (South Asian grouping, lakh/crore)
-- Dates: DD/MM/YYYY (display) / ISO 8601 (storage)
-- Fiscal year: July 1 — June 30 (e.g., FY2024-25)
+`/health` and `/ready` are wired up — Render uses `/health` for its
+liveness probe.
+
+## Project structure
+
+```
+.
+├── backend/        # FastAPI service
+│   ├── app/        # Application code (auth, reconciliation, etc.)
+│   ├── scripts/    # Operational scripts (seed_demo.py + demo fixtures)
+│   └── tests/      # pytest suite
+├── frontend/       # React + Vite app
+│   ├── src/
+│   │   ├── components/
+│   │   ├── hooks/
+│   │   ├── lib/
+│   │   ├── pages/
+│   │   └── store/
+│   └── public/
+├── migrations/     # SQL files applied in lexical order
+└── docs/           # Specs and plans (Phase A–E)
+```
+
+## Documentation
+
+See [`docs/superpowers/specs/`](docs/superpowers/specs/) for design specs
+and [`docs/superpowers/plans/`](docs/superpowers/plans/) for the
+phase-by-phase implementation plans (A–E).
