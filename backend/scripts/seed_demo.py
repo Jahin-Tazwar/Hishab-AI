@@ -340,6 +340,75 @@ async def _seed_reconciliation(
     return recon_id
 
 
+def _reset_demo() -> None:
+    """
+    Delete the demo tenant and everything cascading from it (clients, events,
+    reconciliations, documents, line items, audit_log entries via the trigger).
+    Auth users are left alone — pass a different --email to seed against a
+    different user, or delete via the Supabase dashboard.
+
+    Note: most of these tables ON DELETE CASCADE from `tenants`, so the final
+    tenants delete would suffice. We delete in dependency order anyway so
+    the audit_log gets a clear per-table delete record (the trigger fires
+    on row deletes from these tables).
+    """
+    supabase = get_supabase_admin()
+    existing = (
+        supabase.table("tenants")
+        .select("id")
+        .eq("firm_name", DEMO_TENANT_FIRM_NAME)
+        .limit(1)
+        .execute()
+    )
+    if not existing.data:
+        log.info("seed.reset_no_tenant")
+        return
+    tenant_id = existing.data[0]["id"]
+    # Storage objects: best-effort cleanup of recon-files for this tenant.
+    # The path layout is {tenant_id}/{client_id}/{...}/{file}, so we list
+    # everything under the tenant prefix and delete those object paths.
+    try:
+        # Walk down the tenant_id/client_id/subdir tree to collect every
+        # object path. supabase-py's storage.list returns one folder level
+        # at a time.
+        bucket = supabase.storage.from_("recon-files")
+
+        def _walk(prefix: str) -> list[str]:
+            entries = bucket.list(prefix) or []
+            paths: list[str] = []
+            for entry in entries:
+                name = entry.get("name") if isinstance(entry, dict) else None
+                if not name:
+                    continue
+                # If 'id' is present it's a file; otherwise it's a folder.
+                is_file = bool(entry.get("id")) if isinstance(entry, dict) else False
+                child = f"{prefix}/{name}" if prefix else name
+                if is_file:
+                    paths.append(child)
+                else:
+                    paths.extend(_walk(child))
+            return paths
+
+        all_paths = _walk(str(tenant_id))
+        if all_paths:
+            bucket.remove(all_paths)
+    except Exception as exc:  # noqa: BLE001 — best-effort cleanup
+        log.warning("seed.reset_storage_cleanup_failed", error=str(exc))
+
+    # Schema-aligned table names. Plan said reconciliation_line_items /
+    # reconciliations — actual tables are recon_line_items /
+    # vat_reconciliations.
+    supabase.table("recon_line_items").delete().eq("tenant_id", tenant_id).execute()
+    supabase.table("vat_reconciliations").delete().eq("tenant_id", tenant_id).execute()
+    supabase.table("documents").delete().eq("tenant_id", tenant_id).execute()
+    supabase.table("compliance_events").delete().eq("tenant_id", tenant_id).execute()
+    supabase.table("compliance_obligations").delete().eq("tenant_id", tenant_id).execute()
+    supabase.table("clients").delete().eq("tenant_id", tenant_id).execute()
+    supabase.table("user_profiles").delete().eq("tenant_id", tenant_id).execute()
+    supabase.table("tenants").delete().eq("id", tenant_id).execute()
+    log.info("seed.reset_done", tenant_id=tenant_id)
+
+
 async def seed(email: str, password: str | None) -> None:
     user_id = _ensure_auth_user(email, password)
     tenant_id = _ensure_tenant()
@@ -377,6 +446,12 @@ def main() -> int:
         from scripts.fixtures._generate import main as gen_main
         gen_main()
         return 0
+
+    if args.reset:
+        _reset_demo()
+        # If --email was also passed, fall through to seed; otherwise exit.
+        if not args.email:
+            return 0
 
     if not args.email:
         parser.error("--email is required (unless --regenerate-fixtures)")
