@@ -55,6 +55,7 @@ def create_app() -> FastAPI:
         allow_origins=[
             "http://localhost:5173",   # Vite dev server
             "http://localhost:3000",   # Alt dev port
+            
         ],
         allow_credentials=True,
         allow_methods=["*"],
@@ -103,7 +104,8 @@ def create_app() -> FastAPI:
     @app.get("/health", tags=["system"])
     async def health_check():
         """Basic health check — returns 200 if the server is running."""
-        return {"status": "healthy", "service": "hishabai-api"}
+        from app import __version__
+        return {"status": "healthy", "service": "hishabai-api", "version": __version__}
 
     @app.get("/ready", tags=["system"])
     async def readiness_check():
@@ -114,7 +116,8 @@ def create_app() -> FastAPI:
             await asyncio.to_thread(
                 lambda: supabase.table("tenants").select("id").limit(1).execute()
             )
-            return {"status": "ready", "database": "connected"}
+            from app import __version__
+            return {"status": "ready", "database": "connected", "version": __version__}
         except Exception as exc:
             logger.error("readiness_check_failed", error=str(exc))
             return JSONResponse(
