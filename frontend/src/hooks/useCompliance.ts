@@ -103,7 +103,11 @@ export function useOverdueByClient() {
       if (error) throw error
       const byClient = new Map<string, OverdueByClient>()
       for (const row of data ?? []) {
-        const r = row as { client_id: string; clients: { name: string } }
+        // PostgREST + Supabase JS may type the inner-join `clients` as an
+        // array of one or as a single object depending on the relation
+        // metadata. Cast through unknown — we know it's a single row here
+        // because clients!inner(...) is a non-null FK.
+        const r = row as unknown as { client_id: string; clients: { name: string } }
         const existing = byClient.get(r.client_id)
         if (existing) {
           existing.overdue_count += 1

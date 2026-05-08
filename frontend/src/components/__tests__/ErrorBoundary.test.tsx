@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest"
 
 import { ErrorBoundary } from "../ErrorBoundary"
 
-function Throws() {
+function Throws(): never {
   throw new Error("kaboom")
 }
 
