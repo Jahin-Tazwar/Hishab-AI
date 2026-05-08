@@ -50,6 +50,33 @@ def test_post_reconciliation_returns_id(monkeypatch, client):
     app.dependency_overrides.clear()
 
 
+def test_get_export_returns_xlsx_bytes(monkeypatch, client):
+    tenant_id = uuid4()
+    user_id = uuid4()
+    recon_id = uuid4()
+    fake_bytes = b"PK\x03\x04 fake-xlsx-bytes"
+
+    _bypass_auth(tenant_id, user_id)
+
+    async def _fake_export(*, reconciliation_id, tenant_id):
+        return fake_bytes
+    monkeypatch.setattr(router_module, "export_reconciliation", _fake_export)
+
+    try:
+        res = client.get(
+            f"/api/v1/reconciliations/{recon_id}/export",
+            headers={"Authorization": "Bearer fake"},
+        )
+        assert res.status_code == 200, res.text
+        assert res.content == fake_bytes
+        assert res.headers["content-type"].startswith(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        assert f"reconciliation-{recon_id}.xlsx" in res.headers["content-disposition"]
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_post_reconciliation_422_on_inverted_period(client):
     # Bypass auth so Pydantic body validation runs and returns 422
     _bypass_auth(uuid4(), uuid4())

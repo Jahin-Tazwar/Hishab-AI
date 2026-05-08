@@ -168,3 +168,12 @@ class DocumentTenantMismatchError(HishabError):
             status_code=403,
             details={"document_id": document_id},
         )
+
+
+class ReconciliationNotFoundError(HishabError):
+    def __init__(self, reconciliation_id: str = "") -> None:
+        msg = (
+            f"Reconciliation {reconciliation_id} not found"
+            if reconciliation_id else "Reconciliation not found"
+        )
+        super().__init__("RECONCILIATION_NOT_FOUND", msg, status_code=404)
