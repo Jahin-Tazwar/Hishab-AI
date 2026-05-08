@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom"
 import { DeleteClientDialog } from "@/components/clients/DeleteClientDialog"
 import { EditClientDialog } from "@/components/clients/EditClientDialog"
 import { EntityTypeBadge } from "@/components/clients/EntityTypeBadge"
+import { ClientCalendarTab } from "@/components/compliance/ClientCalendarTab"
 import { ClientReconciliationsList } from "@/components/reconciliation/ClientReconciliationsList"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -90,11 +91,12 @@ export function ClientDetail() {
 
       <ClientReconciliationsList clientId={client.id} />
 
+      <ClientCalendarTab clientId={client.id} />
+
       <div className="border-t pt-6">
         <h2 className="text-lg font-semibold text-slate-900">Coming in later phases</h2>
         <p className="text-sm text-slate-600 mt-1">
-          Documents (Phase C), Compliance Calendar (Phase D) — these tabs will appear here
-          once their phases ship.
+          Documents tab (file uploads beyond reconciliation) ships in a later phase.
         </p>
       </div>
 
