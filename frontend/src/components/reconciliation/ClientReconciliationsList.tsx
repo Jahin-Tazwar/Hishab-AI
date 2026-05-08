@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom"
 
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -19,9 +19,9 @@ export function ClientReconciliationsList({ clientId }: Props) {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-base">VAT reconciliations</CardTitle>
-        <Button asChild>
-          <Link to={`/clients/${clientId}/recon/new`}>New reconciliation</Link>
-        </Button>
+        <Link to={`/clients/${clientId}/recon/new`} className={buttonVariants()}>
+          New reconciliation
+        </Link>
       </CardHeader>
       <CardContent>
         {isLoading ? (

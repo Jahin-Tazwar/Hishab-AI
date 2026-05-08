@@ -4,6 +4,16 @@ HishabAI Backend — FastAPI Dependencies
 Shared dependencies for auth, tenant resolution, and database access.
 Auth is validated against Supabase JWT.
 
+Supabase issues two flavours of JWT depending on project age:
+
+  * ES256 (asymmetric, modern projects since 2024) — verified against the
+    project's public key fetched from /auth/v1/.well-known/jwks.json.
+    PyJWKClient caches keys with automatic rotation.
+  * HS256 (legacy projects, also used by our test suite) — verified
+    against the shared SUPABASE_JWT_SECRET.
+
+We dispatch on the `alg` claim in the JWT header so both kinds work.
+
 IMPORTANT: supabase-py is sync. Every supabase client call inside an async
 function MUST be wrapped in asyncio.to_thread to avoid blocking the event loop.
 """
@@ -19,35 +29,74 @@ from app.config import settings
 from app.database import get_supabase_admin
 
 
+# JWKS client for ES256 verification — lazy-built so config edits at test
+# time still take effect, and so we don't hit the network at import.
+_jwks_client: jwt.PyJWKClient | None = None
+
+
+def _get_jwks_client() -> jwt.PyJWKClient:
+    global _jwks_client
+    if _jwks_client is None:
+        url = f"{settings.SUPABASE_URL}/auth/v1/.well-known/jwks.json"
+        # PyJWKClient caches keys in memory; on a `kid` miss it auto-refetches.
+        _jwks_client = jwt.PyJWKClient(url, cache_keys=True, lifespan=3600)
+    return _jwks_client
+
+
+def _unauthorized(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail={"code": "UNAUTHORIZED", "message": message},
+    )
+
+
 async def get_current_user(
     authorization: str = Header(..., description="Bearer <supabase_jwt>"),
 ) -> dict[str, Any]:
     """Validates the Supabase JWT from the Authorization header. Returns decoded payload."""
     if not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "UNAUTHORIZED", "message": "Missing Bearer token"},
-        )
+        raise _unauthorized("Missing Bearer token")
 
     token = authorization.removeprefix("Bearer ").strip()
 
+    # Inspect the header to decide which signing scheme to use. This is
+    # safe pre-verification — we're only reading the `alg` field; we still
+    # cryptographically verify below.
     try:
-        payload = jwt.decode(
-            token,
-            settings.SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
-            audience="authenticated",
-        )
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "UNAUTHORIZED", "message": "Token expired"},
-        )
+        header = jwt.get_unverified_header(token)
     except jwt.InvalidTokenError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "UNAUTHORIZED", "message": f"Invalid token: {exc}"},
-        )
+        raise _unauthorized(f"Invalid token: {exc}")
+
+    alg = header.get("alg")
+
+    try:
+        if alg == "ES256":
+            # Modern Supabase projects sign with the project's private key;
+            # we verify with the public key from JWKS.
+            jwks = _get_jwks_client()
+            signing_key = await asyncio.to_thread(
+                jwks.get_signing_key_from_jwt, token
+            )
+            payload = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=["ES256"],
+                audience="authenticated",
+            )
+        elif alg == "HS256":
+            # Legacy / test path.
+            payload = jwt.decode(
+                token,
+                settings.SUPABASE_JWT_SECRET,
+                algorithms=["HS256"],
+                audience="authenticated",
+            )
+        else:
+            raise _unauthorized(f"Unsupported JWT alg: {alg}")
+    except jwt.ExpiredSignatureError:
+        raise _unauthorized("Token expired")
+    except jwt.InvalidTokenError as exc:
+        raise _unauthorized(f"Invalid token: {exc}")
 
     return payload
 
