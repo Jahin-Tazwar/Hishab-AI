@@ -27,15 +27,15 @@ PR_HEADERS = [
     "Supplier BIN",
     "Supplier Name",
     "Invoice Date",
-    "Taxable Amount BDT",
-    "VAT Amount BDT",
+    "Taxable Amount (BDT)",
+    "VAT Amount (BDT)",
 ]
 SF_HEADERS = [
     "Invoice No",
     "Buyer BIN",
     "Invoice Date",
-    "Taxable Amount BDT",
-    "VAT Amount BDT",
+    "Taxable Amount (BDT)",
+    "VAT Amount (BDT)",
 ]
 
 PERIOD_START = date(2026, 4, 1)
