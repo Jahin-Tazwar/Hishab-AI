@@ -53,3 +53,4 @@ Strictly adhere to the following naming conventions related to Bangladeshi tax t
 *   Ensure comprehensive test coverage for all new business logic.
 *   Maintain clean, documented code. Use docstrings for complex logic.
 *   Follow PEP 8 for Python and standard ESLint/Prettier rules for TypeScript/React.
+*   Use Playwright tool to automate browser usage.

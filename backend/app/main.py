@@ -50,13 +50,21 @@ def create_app() -> FastAPI:
     # ── Middleware (registered in reverse order of execution) ─────────────
     app.add_middleware(RequestIdMiddleware)
 
+    # Build allow-origins from a static dev list plus an optional production
+    # origin set via FRONTEND_ORIGIN. Setting FRONTEND_ORIGIN on Render after
+    # the first frontend deploy avoids a code change.
+    import os
+    cors_origins = [
+        "http://localhost:5173",   # Vite dev server
+        "http://localhost:3000",   # Alt dev port
+    ]
+    prod_origin = os.environ.get("FRONTEND_ORIGIN", "").strip()
+    if prod_origin:
+        cors_origins.append(prod_origin)
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:5173",   # Vite dev server
-            "http://localhost:3000",   # Alt dev port
-            
-        ],
+        allow_origins=cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
