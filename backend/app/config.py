@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE_MB: int = 20
     ENVIRONMENT: str = "development"
     LOG_LEVEL: str = "DEBUG"
+    FRONTEND_ORIGIN: str = ""
 
     # ── Supabase Storage ──────────────────────────────────────────────────
     STORAGE_BUCKET: str = "documents"

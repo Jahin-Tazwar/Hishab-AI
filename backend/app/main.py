@@ -54,11 +54,15 @@ def create_app() -> FastAPI:
     # origin set via FRONTEND_ORIGIN. Setting FRONTEND_ORIGIN on Render after
     # the first frontend deploy avoids a code change.
     import os
+    from dotenv import load_dotenv
+    
+    load_dotenv()
+    
     cors_origins = [
         "http://localhost:5173",   # Vite dev server
         "http://localhost:3000",   # Alt dev port
     ]
-    prod_origin = os.environ.get("FRONTEND_ORIGIN", "").strip()
+    prod_origin = os.getenv("FRONTEND_ORIGIN", "").strip()
     if prod_origin:
         cors_origins.append(prod_origin)
 
