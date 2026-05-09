@@ -6,7 +6,10 @@ pydantic-settings==2.5.0
 
 # Supabase
 supabase==2.10.0
-PyJWT==2.9.0
+# [crypto] extra pulls in `cryptography`, required for verifying Supabase
+# Auth's ES256-signed JWTs. Without it PyJWT raises MissingCryptographyError
+# on every authenticated request.
+PyJWT[crypto]==2.9.0
 
 # Data processing
 pandas==2.2.0
