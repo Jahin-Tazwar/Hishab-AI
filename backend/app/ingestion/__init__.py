@@ -1,0 +1,1 @@
+"""HishabAI adaptive file ingestion."""
