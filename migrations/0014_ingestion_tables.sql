@@ -48,7 +48,7 @@ CREATE TYPE ingestion_file_status AS ENUM (
 CREATE TABLE ingestion_files (
   id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   job_id             uuid NOT NULL REFERENCES ingestion_jobs(id) ON DELETE CASCADE,
-  tenant_id          uuid NOT NULL,
+  tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   storage_path       text NOT NULL,
   original_filename  text NOT NULL,
   mime_type          text NOT NULL,
@@ -76,8 +76,9 @@ CREATE TABLE extracted_rows (
   id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   file_id            uuid NOT NULL REFERENCES ingestion_files(id) ON DELETE CASCADE,
   job_id             uuid NOT NULL REFERENCES ingestion_jobs(id) ON DELETE CASCADE,
-  tenant_id          uuid NOT NULL,
+  tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   source_page_no     int,
+  -- row_data: current/edited values; row_data_original: immutable extraction snapshot
   row_data           jsonb NOT NULL,
   row_data_original  jsonb NOT NULL,
   status             extracted_row_status NOT NULL DEFAULT 'needs_review',
@@ -143,6 +144,7 @@ CREATE TRIGGER trg_ingestion_jobs_updated_at
 -- RLS — same pattern as 0004_rls_policies.sql
 -- ============================================================
 
+-- Service role bypasses RLS automatically; the worker writes via admin client.
 ALTER TABLE ingestion_jobs            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ingestion_files           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE extracted_rows            ENABLE ROW LEVEL SECURITY;
