@@ -14,11 +14,14 @@ function renderWithTheme(ui: React.ReactNode) {
 }
 
 describe("ThemeToggle", () => {
-  it("switches the document class on click", async () => {
+  it("toggles the document class in both directions", async () => {
+    const user = userEvent.setup()
     renderWithTheme(<ThemeToggle />)
     const btn = screen.getByRole("button", { name: /toggle theme/i })
     expect(document.documentElement.classList.contains("dark")).toBe(false)
-    await userEvent.click(btn)
+    await user.click(btn)
     expect(document.documentElement.classList.contains("dark")).toBe(true)
+    await user.click(btn)
+    expect(document.documentElement.classList.contains("dark")).toBe(false)
   })
 })
