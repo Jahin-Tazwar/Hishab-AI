@@ -1,4 +1,9 @@
-import { createBrowserRouter, Navigate } from "react-router-dom"
+import {
+  createBrowserRouter,
+  Navigate,
+  ScrollRestoration,
+  useParams,
+} from "react-router-dom"
 
 import { AppShell } from "@/components/layout/AppShell"
 import { AuthLayout } from "@/components/layout/AuthLayout"
@@ -8,84 +13,73 @@ import { RequireTenant } from "@/components/RequireTenant"
 import { ClientDetail } from "@/pages/ClientDetail"
 import { Clients } from "@/pages/Clients"
 import { Dashboard } from "@/pages/Dashboard"
+import { IngestionJob } from "@/pages/IngestionJob"
+import { IngestionNew } from "@/pages/IngestionNew"
 import { Login } from "@/pages/Login"
 import { NotFound } from "@/pages/NotFound"
 import { Onboard } from "@/pages/Onboard"
-import { ReconNew } from "@/pages/ReconNew"
 import { ReconReport } from "@/pages/ReconReport"
 import { Signup } from "@/pages/Signup"
 
+function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <ScrollRestoration />
+      {children}
+    </>
+  )
+}
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  return (
+    <RequireAuth>
+      <RequireTenant>
+        <AppShell>
+          <RouteBoundary>{children}</RouteBoundary>
+        </AppShell>
+      </RequireTenant>
+    </RequireAuth>
+  )
+}
+
+function RedirectReconNew() {
+  const { id } = useParams<{ id: string }>()
+  return <Navigate to={`/clients/${id}/ingestion/new`} replace />
+}
+
 export const router = createBrowserRouter([
-  { path: "/", element: <Navigate to="/login" replace /> },
-  { path: "/login", element: <AuthLayout><Login /></AuthLayout> },
-  { path: "/signup", element: <AuthLayout><Signup /></AuthLayout> },
+  { path: "/", element: <RootLayout><Navigate to="/login" replace /></RootLayout> },
+  { path: "/login", element: <RootLayout><AuthLayout><Login /></AuthLayout></RootLayout> },
+  { path: "/signup", element: <RootLayout><AuthLayout><Signup /></AuthLayout></RootLayout> },
   {
     path: "/onboard",
-    element: (
-      <RequireAuth>
-        <AuthLayout><Onboard /></AuthLayout>
-      </RequireAuth>
-    ),
+    element: <RootLayout><RequireAuth><AuthLayout><Onboard /></AuthLayout></RequireAuth></RootLayout>,
+  },
+  { path: "/dashboard", element: <RootLayout><ProtectedRoute><Dashboard /></ProtectedRoute></RootLayout> },
+  { path: "/clients", element: <RootLayout><ProtectedRoute><Clients /></ProtectedRoute></RootLayout> },
+  { path: "/clients/:id", element: <RootLayout><ProtectedRoute><ClientDetail /></ProtectedRoute></RootLayout> },
+
+  // Ingestion (new flow)
+  {
+    path: "/clients/:id/ingestion/new",
+    element: <RootLayout><ProtectedRoute><IngestionNew /></ProtectedRoute></RootLayout>,
   },
   {
-    path: "/dashboard",
-    element: (
-      <RequireAuth>
-        <RequireTenant>
-          <AppShell>
-            <RouteBoundary><Dashboard /></RouteBoundary>
-          </AppShell>
-        </RequireTenant>
-      </RequireAuth>
-    ),
+    path: "/clients/:id/ingestion/:jobId",
+    element: <RootLayout><ProtectedRoute><IngestionJob /></ProtectedRoute></RootLayout>,
   },
-  {
-    path: "/clients",
-    element: (
-      <RequireAuth>
-        <RequireTenant>
-          <AppShell>
-            <RouteBoundary><Clients /></RouteBoundary>
-          </AppShell>
-        </RequireTenant>
-      </RequireAuth>
-    ),
-  },
-  {
-    path: "/clients/:id",
-    element: (
-      <RequireAuth>
-        <RequireTenant>
-          <AppShell>
-            <RouteBoundary><ClientDetail /></RouteBoundary>
-          </AppShell>
-        </RequireTenant>
-      </RequireAuth>
-    ),
-  },
+
+  // Old recon-new → redirect to new ingestion flow
   {
     path: "/clients/:id/recon/new",
-    element: (
-      <RequireAuth>
-        <RequireTenant>
-          <AppShell>
-            <RouteBoundary><ReconNew /></RouteBoundary>
-          </AppShell>
-        </RequireTenant>
-      </RequireAuth>
-    ),
+    element: <RedirectReconNew />,
   },
+
+  // Recon report still served from the old page
   {
     path: "/clients/:id/recon/:reconId",
-    element: (
-      <RequireAuth>
-        <RequireTenant>
-          <AppShell>
-            <RouteBoundary><ReconReport /></RouteBoundary>
-          </AppShell>
-        </RequireTenant>
-      </RequireAuth>
-    ),
+    element: <RootLayout><ProtectedRoute><ReconReport /></ProtectedRoute></RootLayout>,
   },
-  { path: "*", element: <NotFound /> },
+
+  { path: "*", element: <RootLayout><NotFound /></RootLayout> },
 ])
