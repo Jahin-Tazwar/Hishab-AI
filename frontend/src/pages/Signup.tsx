@@ -53,19 +53,19 @@ export function Signup() {
           <div className="space-y-1">
             <Label htmlFor="email">Email</Label>
             <Input id="email" type="email" {...register("email")} />
-            {errors.email && <p className="text-sm text-red-600">{errors.email.message}</p>}
+            {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
           </div>
           <div className="space-y-1">
             <Label htmlFor="password">Password</Label>
             <Input id="password" type="password" {...register("password")} />
-            {errors.password && <p className="text-sm text-red-600">{errors.password.message}</p>}
+            {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
           </div>
           <Button type="submit" disabled={submitting} className="w-full">
             {submitting ? "Creating account…" : "Create account"}
           </Button>
-          <p className="text-sm text-center text-slate-600">
+          <p className="text-sm text-center text-muted-foreground">
             Already have an account?{" "}
-            <Link to="/login" className="text-slate-900 underline">Sign in</Link>
+            <Link to="/login" className="text-foreground underline">Sign in</Link>
           </p>
         </form>
       </CardContent>

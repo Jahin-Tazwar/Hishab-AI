@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Link, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams } from "react-router-dom"
 
 import { DeleteClientDialog } from "@/components/clients/DeleteClientDialog"
 import { EditClientDialog } from "@/components/clients/EditClientDialog"
@@ -14,6 +14,7 @@ import { useClient } from "@/hooks/useClients"
 export function ClientDetail() {
   const { id } = useParams<{ id: string }>()
   const { data: client, isLoading } = useClient(id)
+  const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
@@ -24,8 +25,8 @@ export function ClientDetail() {
   if (!client) {
     return (
       <div className="space-y-4 p-8">
-        <p className="text-slate-700">Client not found or has been deleted.</p>
-        <Link to="/clients" className="text-slate-900 underline">
+        <p className="text-foreground">Client not found or has been deleted.</p>
+        <Link to="/clients" className="text-foreground underline">
           Back to clients
         </Link>
       </div>
@@ -36,11 +37,11 @@ export function ClientDetail() {
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <Link to="/clients" className="text-sm text-slate-500 hover:underline">
+          <Link to="/clients" className="text-sm text-muted-foreground hover:underline">
             ← Clients
           </Link>
-          <h1 className="text-2xl font-bold text-slate-900 mt-1">{client.name}</h1>
-          {client.name_bn && <p className="text-slate-600">{client.name_bn}</p>}
+          <h1 className="text-2xl font-bold text-foreground mt-1">{client.name}</h1>
+          {client.name_bn && <p className="text-muted-foreground">{client.name_bn}</p>}
           <div className="mt-2">
             <EntityTypeBadge type={client.entity_type} />
           </div>
@@ -85,7 +86,7 @@ export function ClientDetail() {
             <CardTitle>Notes</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-slate-700 whitespace-pre-wrap">{client.notes}</p>
+            <p className="text-sm text-foreground whitespace-pre-wrap">{client.notes}</p>
           </CardContent>
         </Card>
       )}
@@ -95,8 +96,8 @@ export function ClientDetail() {
       <ClientCalendarTab clientId={client.id} />
 
       <div className="border-t pt-6">
-        <h2 className="text-lg font-semibold text-slate-900">Coming in later phases</h2>
-        <p className="text-sm text-slate-600 mt-1">
+        <h2 className="text-lg font-semibold text-foreground">Coming in later phases</h2>
+        <p className="text-sm text-muted-foreground mt-1">
           Documents tab (file uploads beyond reconciliation) ships in a later phase.
         </p>
       </div>
@@ -106,10 +107,7 @@ export function ClientDetail() {
         client={client}
         open={deleting}
         onOpenChange={setDeleting}
-        onDeleted={() => {
-          // Navigate back to list after delete
-          window.location.href = "/clients"
-        }}
+        onDeleted={() => navigate("/clients")}
       />
     </div>
   )
@@ -118,7 +116,7 @@ export function ClientDetail() {
 function Field({ label, value, mono }: { label: string; value: string | null | undefined; mono?: boolean }) {
   return (
     <div className="grid grid-cols-3 gap-2">
-      <span className="text-slate-500">{label}</span>
+      <span className="text-muted-foreground">{label}</span>
       <span className={`col-span-2 ${mono ? "font-mono" : ""}`}>{value || "—"}</span>
     </div>
   )

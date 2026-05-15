@@ -85,7 +85,7 @@ export function Onboard() {
               placeholder="e.g. Rahman & Associates"
               {...register("firmName")}
             />
-            {errors.firmName && <p className="text-sm text-red-600">{errors.firmName.message}</p>}
+            {errors.firmName && <p className="text-sm text-destructive">{errors.firmName.message}</p>}
           </div>
           <div className="space-y-1">
             <Label htmlFor="fullName">Your full name</Label>
@@ -94,7 +94,7 @@ export function Onboard() {
               placeholder="e.g. Anwar Rahman"
               {...register("fullName")}
             />
-            {errors.fullName && <p className="text-sm text-red-600">{errors.fullName.message}</p>}
+            {errors.fullName && <p className="text-sm text-destructive">{errors.fullName.message}</p>}
           </div>
           <Button type="submit" disabled={submitting} className="w-full">
             {submitting ? "Setting up…" : "Continue to dashboard"}

@@ -79,10 +79,10 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="flex min-h-[40vh] items-center justify-center p-6">
           <Card className="max-w-md w-full">
             <CardContent className="space-y-3 pt-6">
-              <h2 className="text-lg font-semibold text-slate-900">
+              <h2 className="text-lg font-semibold text-foreground">
                 Something went wrong
               </h2>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-muted-foreground">
                 The page hit an unexpected error. You can try again, or head
                 back to the dashboard.
               </p>
@@ -90,7 +90,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 <Button onClick={this.reset}>Try again</Button>
                 <Link
                   to="/dashboard"
-                  className="inline-flex items-center justify-center rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+                  className="inline-flex items-center justify-center rounded-md border border-input px-3 py-1.5 text-sm hover:bg-muted"
                 >
                   Go to dashboard
                 </Link>

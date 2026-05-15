@@ -15,19 +15,19 @@ export function NotFound() {
   const isAuthed = Boolean(session)
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-      <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 text-center shadow-sm">
-        <p className="text-sm font-medium uppercase tracking-wide text-slate-500">
+    <div className="flex min-h-screen items-center justify-center bg-muted p-6">
+      <div className="w-full max-w-md rounded-lg border border-border bg-white p-6 text-center shadow-sm">
+        <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
           Error 404
         </p>
-        <h1 className="mt-1 text-2xl font-bold text-slate-900">Page not found</h1>
-        <p className="mt-2 text-sm text-slate-600">
+        <h1 className="mt-1 text-2xl font-bold text-foreground">Page not found</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
           The page you're looking for doesn't exist or has been moved.
         </p>
         <div className="mt-5">
           <Link
             to={isAuthed ? "/dashboard" : "/login"}
-            className="inline-flex items-center justify-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
           >
             {isAuthed ? "Back to dashboard" : "Back to login"}
           </Link>
