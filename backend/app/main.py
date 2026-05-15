@@ -176,6 +176,41 @@ def create_app() -> FastAPI:
                 content={"status": "not_ready", "database": "disconnected"},
             )
 
+    if os.environ.get("INGESTION_ENABLED", "false").lower() == "true":
+
+        @app.get("/health/ingestion", tags=["system"])
+        async def ingestion_health():
+            """Returns queue depth + stuck-job count + last-hour failure rate."""
+            from datetime import datetime, timedelta
+            sb = get_supabase_admin()
+
+            def _q_pending():
+                return sb.table("ingestion_jobs").select("id", count="exact").eq(
+                    "status", "pending"
+                ).execute().count or 0
+
+            def _q_stuck():
+                cutoff = (datetime.utcnow() - timedelta(minutes=15)).isoformat()
+                return sb.table("ingestion_jobs").select("id", count="exact").eq(
+                    "status", "extracting"
+                ).lt("updated_at", cutoff).execute().count or 0
+
+            def _q_failed():
+                cutoff = (datetime.utcnow() - timedelta(hours=1)).isoformat()
+                return sb.table("ingestion_jobs").select("id", count="exact").eq(
+                    "status", "failed"
+                ).gt("created_at", cutoff).execute().count or 0
+
+            pending = await asyncio.to_thread(_q_pending)
+            stuck = await asyncio.to_thread(_q_stuck)
+            failed_1h = await asyncio.to_thread(_q_failed)
+
+            return {
+                "pending_jobs": pending,
+                "stuck_extracting_15m": stuck,
+                "failed_last_hour": failed_1h,
+            }
+
     # ── Routers ───────────────────────────────────────────────────────────
     from app.reconciliation.router import router as reconciliation_router
     app.include_router(reconciliation_router)
