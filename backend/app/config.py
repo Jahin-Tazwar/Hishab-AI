@@ -26,7 +26,11 @@ class Settings(BaseSettings):
     # ── Supabase Storage ──────────────────────────────────────────────────
     STORAGE_BUCKET: str = "documents"
 
-    model_config = {"env_file": ".env", "case_sensitive": True}
+    # ── Ingestion (Phase F) ───────────────────────────────────────────────
+    # Tolerate the optional ingestion env vars so they can live in the same
+    # .env without raising "extra_forbidden". The ingestion module reads
+    # these directly via os.environ; we don't need to surface them here.
+    model_config = {"env_file": ".env", "case_sensitive": True, "extra": "ignore"}
 
 
 settings = Settings()
