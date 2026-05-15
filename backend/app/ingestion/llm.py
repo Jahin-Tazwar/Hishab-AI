@@ -123,12 +123,16 @@ def get_llm_adapter() -> LLMAdapter:
 
 # ─────────────────────────────────────────────────────────────────────────
 # Real Gemini implementation
+#
+# Uses the unified `google-genai` SDK (the legacy `google-generativeai`
+# package is deprecated upstream). The SDK is imported lazily inside
+# GeminiLLMAdapter.__init__ so that importing this module does NOT require
+# the SDK to be installed — useful for stub-only test runs and for the
+# INGESTION_ENABLED=false production path.
 # ─────────────────────────────────────────────────────────────────────────
 
 import json as _json
 from typing import cast
-
-import google.generativeai as genai
 
 
 _MODEL = "gemini-2.5-flash"
@@ -197,17 +201,25 @@ Input:
 
 
 class GeminiLLMAdapter:
-    """Production LLM adapter using Google's google-generativeai SDK
+    """Production LLM adapter using Google's unified `google-genai` SDK
     against the Gemini 2.5 Flash model.
 
-    Configured with an API key (the simplest auth path). For Vertex AI,
-    swap in `vertexai.generative_models.GenerativeModel` with the same
-    method shape and a service-account credential.
+    The SDK is imported lazily inside ``__init__`` so importing this module
+    never requires the SDK to be installed. This keeps INGESTION_ENABLED=false
+    runs free of the dependency, and lets stub-only tests run on a slim env.
+
+    For Vertex AI auth (instead of API key), construct the client with
+    ``Client(vertexai=True, project=..., location=...)`` and ADC credentials.
     """
 
     def __init__(self, *, api_key: str, model_name: str = _MODEL) -> None:
-        genai.configure(api_key=api_key)
-        self._model = genai.GenerativeModel(model_name)
+        # Lazy imports — see class docstring.
+        from google import genai  # type: ignore[import-not-found]
+        from google.genai import types  # type: ignore[import-not-found]
+
+        self._client = genai.Client(api_key=api_key)
+        self._types = types
+        self._model_name = model_name
 
     # ── public API ──
 
@@ -243,16 +255,19 @@ class GeminiLLMAdapter:
         if images:
             parts: list[Any] = [prompt]
             for img in images:
-                parts.append({"mime_type": "image/png", "data": img})
-            res = self._model.generate_content(
-                parts,
-                generation_config={"response_mime_type": "application/json"},
-            )
+                parts.append(
+                    self._types.Part.from_bytes(data=img, mime_type="image/png")
+                )
+            contents: Any = parts
         else:
-            res = self._model.generate_content(
-                prompt,
-                generation_config={"response_mime_type": "application/json"},
-            )
+            contents = prompt
+        res = self._client.models.generate_content(
+            model=self._model_name,
+            contents=contents,
+            config=self._types.GenerateContentConfig(
+                response_mime_type="application/json",
+            ),
+        )
         try:
             data = _json.loads(res.text)
         except Exception as e:
@@ -266,9 +281,12 @@ class GeminiLLMAdapter:
     # ── helpers ──
 
     def _call_json(self, prompt: str) -> dict[str, Any]:
-        res = self._model.generate_content(
-            prompt,
-            generation_config={"response_mime_type": "application/json"},
+        res = self._client.models.generate_content(
+            model=self._model_name,
+            contents=prompt,
+            config=self._types.GenerateContentConfig(
+                response_mime_type="application/json",
+            ),
         )
         try:
             return cast(dict[str, Any], _json.loads(res.text))
