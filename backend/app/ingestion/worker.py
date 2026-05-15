@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -71,7 +71,7 @@ async def process_one_file(
     tenant_id: UUID,
     ctx: ExtractionContext,
 ) -> None:
-    started = datetime.utcnow()
+    started = datetime.now(timezone.utc)
     await p.update_file(
         file_id, tenant_id=tenant_id,
         status=FileStatus.EXTRACTING,
@@ -127,7 +127,7 @@ async def process_one_file(
         rows_extracted=len(result.rows),
         needs_review=result.needs_review,
         warnings=result.warnings,
-        extracted_at=datetime.utcnow(),
+        extracted_at=datetime.now(timezone.utc),
     )
     await p.increment_files_done(job_id, tenant_id=tenant_id)
     await p.recompute_row_counts(job_id, tenant_id=tenant_id)
@@ -145,10 +145,17 @@ async def process_job(job_id: UUID, *, tenant_id: UUID) -> None:
         FileStatus.QUEUED.value, FileStatus.EXTRACTING.value
     )]
 
+    # Supabase returns date columns as ISO strings; ExtractionContext
+    # (and downstream `validate_row`) require real `date` objects.
+    def _as_date(v: object) -> date:
+        if isinstance(v, date):
+            return v
+        return date.fromisoformat(str(v))
+
     ctx = ExtractionContext(
         kind=JobKind(job["kind"]),
-        period_start=job["period_start"],
-        period_end=job["period_end"],
+        period_start=_as_date(job["period_start"]),
+        period_end=_as_date(job["period_end"]),
         tenant_id=str(tenant_id),
     )
 
@@ -210,7 +217,7 @@ async def poll_pending_jobs(*, sleep_s: float = 5.0) -> None:
     log.info("ingestion.worker.loop_started")
     while True:
         try:
-            cutoff = (datetime.utcnow() - _LEASE_TIMEOUT).isoformat()
+            cutoff = (datetime.now(timezone.utc) - _LEASE_TIMEOUT).isoformat()
 
             def _q():
                 return (

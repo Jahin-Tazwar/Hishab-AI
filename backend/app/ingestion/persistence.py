@@ -7,7 +7,7 @@ filter on every query.
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any, Optional
 from uuid import UUID
 
@@ -89,7 +89,7 @@ async def update_job_status(
     if reconciliation_id is not None:
         payload["reconciliation_id"] = str(reconciliation_id)
     if status == JobStatus.COMPLETED:
-        payload["completed_at"] = datetime.utcnow().isoformat()
+        payload["completed_at"] = datetime.now(timezone.utc).isoformat()
 
     def _u():
         return (
@@ -379,7 +379,7 @@ async def update_row(
         payload["status"] = status.value
     if reviewed_by is not None:
         payload["reviewed_by"] = str(reviewed_by)
-        payload["reviewed_at"] = datetime.utcnow().isoformat()
+        payload["reviewed_at"] = datetime.now(timezone.utc).isoformat()
     if not payload:
         return
 

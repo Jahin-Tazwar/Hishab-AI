@@ -181,7 +181,7 @@ def create_app() -> FastAPI:
         @app.get("/health/ingestion", tags=["system"])
         async def ingestion_health():
             """Returns queue depth + stuck-job count + last-hour failure rate."""
-            from datetime import datetime, timedelta
+            from datetime import datetime, timedelta, timezone
             sb = get_supabase_admin()
 
             def _q_pending():
@@ -190,13 +190,13 @@ def create_app() -> FastAPI:
                 ).execute().count or 0
 
             def _q_stuck():
-                cutoff = (datetime.utcnow() - timedelta(minutes=15)).isoformat()
+                cutoff = (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat()
                 return sb.table("ingestion_jobs").select("id", count="exact").eq(
                     "status", "extracting"
                 ).lt("updated_at", cutoff).execute().count or 0
 
             def _q_failed():
-                cutoff = (datetime.utcnow() - timedelta(hours=1)).isoformat()
+                cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
                 return sb.table("ingestion_jobs").select("id", count="exact").eq(
                     "status", "failed"
                 ).gt("created_at", cutoff).execute().count or 0
