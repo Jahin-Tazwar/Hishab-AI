@@ -78,9 +78,16 @@ async def run_handoff(
     job = await p.get_job(job_id, tenant_id=tenant_id)
     if job is None:
         raise HandoffError(f"Job {job_id} not found")
-    if job["status"] != JobStatus.CONFIRMED.value:
+    # finalize_job() flips status to RECONCILING immediately before calling
+    # run_handoff(), so accept either: handoff is invoked DURING the
+    # 'reconciling' window and once a job is CONFIRMED it is also valid to
+    # re-run handoff (idempotent retry after a previous crash).
+    if job["status"] not in (
+        JobStatus.CONFIRMED.value,
+        JobStatus.RECONCILING.value,
+    ):
         raise HandoffError(
-            f"Job {job_id} is in {job['status']}, not 'confirmed'"
+            f"Job {job_id} is in {job['status']}, expected 'confirmed' or 'reconciling'"
         )
 
     client_id = UUID(job["client_id"])
