@@ -15,6 +15,11 @@
 
 FROM python:3.11-slim
 
+# python-magic needs libmagic1 at runtime (used by ingestion MIME detection).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends libmagic1 \
+ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Install Python dependencies (cached layer when requirements.txt unchanged)

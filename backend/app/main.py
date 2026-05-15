@@ -180,6 +180,11 @@ def create_app() -> FastAPI:
     from app.reconciliation.router import router as reconciliation_router
     app.include_router(reconciliation_router)
 
+    if os.environ.get("INGESTION_ENABLED", "false").lower() == "true":
+        from app.ingestion.router import router as ingestion_router
+        app.include_router(ingestion_router)
+        logger.info("ingestion.router_registered")
+
     return app
 
 
