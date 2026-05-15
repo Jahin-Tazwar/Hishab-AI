@@ -5,7 +5,9 @@ Main entry point. Registers routers, middleware, exception handlers, and health 
 """
 
 import asyncio
+import os
 import uuid
+from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI, Request
@@ -36,6 +38,35 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
             structlog.contextvars.clear_contextvars()
 
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """Optional ingestion boot: only when feature flag is on AND key present."""
+    ingestion_task: asyncio.Task | None = None
+    if os.environ.get("INGESTION_ENABLED", "false").lower() == "true":
+        from app.ingestion.llm import GeminiLLMAdapter, set_llm_adapter
+        from app.ingestion.worker import poll_pending_jobs
+
+        gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
+        if not gemini_key:
+            logger.warning(
+                "ingestion.boot.skipped",
+                reason="INGESTION_ENABLED=true but GEMINI_API_KEY missing",
+            )
+        else:
+            set_llm_adapter(GeminiLLMAdapter(api_key=gemini_key))
+            ingestion_task = asyncio.create_task(poll_pending_jobs())
+            logger.info("ingestion.boot.started")
+    try:
+        yield
+    finally:
+        if ingestion_task is not None:
+            ingestion_task.cancel()
+            try:
+                await ingestion_task
+            except asyncio.CancelledError:
+                pass
+
+
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
 
@@ -45,6 +76,7 @@ def create_app() -> FastAPI:
         version="0.1.0",
         docs_url="/docs" if settings.ENVIRONMENT == "development" else None,
         redoc_url="/redoc" if settings.ENVIRONMENT == "development" else None,
+        lifespan=_lifespan,
     )
 
     # ── Middleware (registered in reverse order of execution) ─────────────
