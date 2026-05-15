@@ -13,6 +13,7 @@ extraction_started_at < now() - 10 min (handled in `claim_pending_jobs`).
 from __future__ import annotations
 
 import asyncio
+import os
 from datetime import datetime, timedelta
 from typing import Optional
 from uuid import UUID
@@ -35,11 +36,21 @@ from app.ingestion.schemas import (
 )
 from app.ingestion.storage import download_original
 from app.ingestion.validation import validate_row
+from app.ingestion.rate_limit import RateLimitExceeded, TokenBucketRegistry
 
 log = structlog.get_logger()
 
 _CONCURRENCY = 8
 _LEASE_TIMEOUT = timedelta(minutes=10)
+
+_RATE = TokenBucketRegistry(
+    per_min=int(os.environ.get("INGESTION_MAX_CALLS_PER_MIN", "30")),
+    per_day=int(os.environ.get("INGESTION_MAX_CALLS_PER_DAY", "5000")),
+)
+
+
+def get_rate_limiter() -> TokenBucketRegistry:
+    return _RATE
 
 
 def _engine_for(name: str) -> Engine:
@@ -67,6 +78,17 @@ async def process_one_file(
         engine=engine.name,
         extraction_started_at=started,
     )
+    # Only LLM-touching engines need rate-limiting
+    if engine.name in ("pandas+llm-mapper", "pdfplumber+llm", "gemini-vision"):
+        try:
+            _RATE.acquire(tenant_id)
+        except RateLimitExceeded as e:
+            await p.update_file(
+                file_id, tenant_id=tenant_id,
+                status=FileStatus.FAILED, error=f"rate_limited: {e}"[:500],
+            )
+            await p.increment_files_done(job_id, tenant_id=tenant_id)
+            return
     try:
         result: ExtractedFileResult = await asyncio.to_thread(
             engine.extract, file_bytes, ctx
