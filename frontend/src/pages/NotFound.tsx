@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom"
 
+import { Card, CardContent } from "@/components/ui/card"
 import { useAuthStore } from "@/store/auth"
 
 /**
@@ -13,26 +14,27 @@ import { useAuthStore } from "@/store/auth"
 export function NotFound() {
   const session = useAuthStore((s) => s.session)
   const isAuthed = Boolean(session)
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted p-6">
-      <div className="w-full max-w-md rounded-lg border border-border bg-white p-6 text-center shadow-sm">
-        <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          Error 404
-        </p>
-        <h1 className="mt-1 text-2xl font-bold text-foreground">Page not found</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
-        </p>
-        <div className="mt-5">
-          <Link
-            to={isAuthed ? "/dashboard" : "/login"}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            {isAuthed ? "Back to dashboard" : "Back to login"}
-          </Link>
-        </div>
-      </div>
+      <Card className="max-w-md w-full text-center">
+        <CardContent className="pt-6">
+          <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+            Error 404
+          </p>
+          <h1 className="mt-1 text-2xl font-bold text-foreground">Page not found</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            The page you're looking for doesn't exist or has been moved.
+          </p>
+          <div className="mt-5">
+            <Link
+              to={isAuthed ? "/dashboard" : "/login"}
+              className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium hover:bg-primary/90"
+            >
+              {isAuthed ? "Back to dashboard" : "Back to login"}
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
