@@ -13,7 +13,7 @@ _ALLOWED: dict[JobStatus, set[JobStatus]] = {
     JobStatus.PENDING:           {JobStatus.EXTRACTING, JobStatus.FAILED},
     JobStatus.EXTRACTING:        {JobStatus.READY_FOR_REVIEW, JobStatus.FAILED},
     JobStatus.READY_FOR_REVIEW:  {JobStatus.CONFIRMED, JobStatus.FAILED},
-    JobStatus.CONFIRMED:         {JobStatus.RECONCILING, JobStatus.FAILED},
+    JobStatus.CONFIRMED:         {JobStatus.RECONCILING, JobStatus.FAILED, JobStatus.COMPLETED},
     JobStatus.RECONCILING:       {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CONFIRMED},
     JobStatus.COMPLETED:         set(),
     JobStatus.FAILED:            set(),
