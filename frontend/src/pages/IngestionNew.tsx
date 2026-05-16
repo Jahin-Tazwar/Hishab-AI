@@ -1,6 +1,7 @@
 import { useParams } from "react-router-dom"
 
-import { UploadStep } from "@/components/ingestion/UploadStep"
+import { SetupStep } from "@/components/ingestion/SetupStep"
+import { Stepper } from "@/components/ingestion/Stepper"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { useClient } from "@/hooks/useClients"
 
@@ -17,15 +18,10 @@ export function IngestionNew() {
           { label: "New ingestion" },
         ]}
         title="New ingestion"
-        subtitle="Upload purchase-register or supplier-export documents in any format. We'll extract, you review, then finalize."
+        subtitle="Pick a period. We'll walk you through the purchase register and the supplier-filed export, then reconcile."
       />
-      <UploadStep
-        clientId={clientId}
-        kind="purchase_register"
-        periodStart=""
-        periodEnd=""
-        onCreated={() => {}}
-      />
+      <Stepper activeStep={1} />
+      <SetupStep clientId={clientId} />
     </div>
   )
 }
