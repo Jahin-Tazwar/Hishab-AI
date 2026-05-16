@@ -7,14 +7,20 @@ import {
   FinalizeResponseSchema,
   JobDetailOutSchema,
   JobKindEnum,
+  RecentDocsOutSchema,
   RowsListOutSchema,
+  SessionStartRequestSchema,
+  SessionStartResponseSchema,
   type CreateJobResponse,
   type ExtractedRowData,
   type ExtractedRowOut,
   type FinalizeResponse,
   type JobDetailOut,
   type JobKind,
+  type RecentDocsOut,
   type RowsListOut,
+  type SessionStartRequest,
+  type SessionStartResponse,
 } from "@/types/ingestion"
 
 export interface CreateJobInput {
@@ -23,6 +29,9 @@ export interface CreateJobInput {
   period_end: string
   kind: JobKind
   files: File[]
+  linked_pr_job_id?: string
+  reuse_pr_doc_id?: string
+  reuse_sf_doc_id?: string
 }
 
 export async function createJob(input: CreateJobInput): Promise<CreateJobResponse> {
@@ -31,6 +40,9 @@ export async function createJob(input: CreateJobInput): Promise<CreateJobRespons
   fd.append("period_start", input.period_start)
   fd.append("period_end", input.period_end)
   fd.append("kind", JobKindEnum.parse(input.kind))
+  if (input.linked_pr_job_id) fd.append("linked_pr_job_id", input.linked_pr_job_id)
+  if (input.reuse_pr_doc_id)  fd.append("reuse_pr_doc_id",  input.reuse_pr_doc_id)
+  if (input.reuse_sf_doc_id)  fd.append("reuse_sf_doc_id",  input.reuse_sf_doc_id)
   for (const f of input.files) fd.append("files", f, f.name)
   const { data } = await api.post("/api/v1/ingestion/jobs", fd, {
     headers: { "Content-Type": "multipart/form-data" },
@@ -94,6 +106,19 @@ export async function bulkConfirmRows(
 export async function finalizeJob(jobId: string): Promise<FinalizeResponse> {
   const { data } = await api.post(`/api/v1/ingestion/jobs/${jobId}/finalize`)
   return FinalizeResponseSchema.parse(data)
+}
+
+export async function startSession(input: SessionStartRequest): Promise<SessionStartResponse> {
+  const validated = SessionStartRequestSchema.parse(input)
+  const { data } = await api.post("/api/v1/ingestion/sessions/start", validated)
+  return SessionStartResponseSchema.parse(data)
+}
+
+export async function fetchRecentDocs(params: {
+  client_id: string; period_start: string; period_end: string;
+}): Promise<RecentDocsOut> {
+  const { data } = await api.get("/api/v1/ingestion/documents/recent", { params })
+  return RecentDocsOutSchema.parse(data)
 }
 
 /** Returns the URL where the original file is streamed. */
