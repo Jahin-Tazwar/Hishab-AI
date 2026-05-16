@@ -64,6 +64,9 @@ class CreateJobRequest(BaseModel):
     period_start: date
     period_end: date
     kind: JobKind
+    linked_pr_job_id: Optional[UUID] = None
+    reuse_pr_doc_id: Optional[UUID] = None
+    reuse_sf_doc_id: Optional[UUID] = None
 
     @model_validator(mode="after")
     def _period_ordered(self) -> "CreateJobRequest":
@@ -150,6 +153,10 @@ class JobOut(BaseModel):
     rows_needs_review: int
     error_summary: Optional[str] = None
     reconciliation_id: Optional[UUID] = None
+    linked_pr_job_id: Optional[UUID] = None
+    linked_sf_job_id: Optional[UUID] = None
+    reuse_pr_doc_id: Optional[UUID] = None
+    reuse_sf_doc_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime
     completed_at: Optional[datetime] = None
@@ -195,3 +202,52 @@ class ColumnMappingOut(BaseModel):
     mapping: dict[str, Optional[str]]
     confirmed_by: Optional[UUID] = None
     created_at: datetime
+
+
+# ── Session start (new combined wizard entry point) ──────────────────────
+
+
+class SessionStartRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    client_id: UUID
+    period_start: date
+    period_end: date
+    reuse_pr_doc_id: Optional[UUID] = None
+    reuse_sf_doc_id: Optional[UUID] = None
+
+    @model_validator(mode="after")
+    def _period_ordered(self) -> "SessionStartRequest":
+        if self.period_end < self.period_start:
+            raise ValueError("period_end must be on or after period_start")
+        return self
+
+
+class SessionStartResponse(BaseModel):
+    """Exactly one of the three IDs (or only `reconciliation_id`) is set.
+
+    - Both reuses: only `reconciliation_id`.
+    - PR fresh: `pr_job_id` only.
+    - PR reused, SF fresh: `sf_job_id` only (SF job carries reuse_pr_doc_id).
+    - PR fresh, SF reused: `pr_job_id` only (PR job carries reuse_sf_doc_id).
+    """
+
+    pr_job_id: Optional[UUID] = None
+    sf_job_id: Optional[UUID] = None
+    reconciliation_id: Optional[UUID] = None
+
+
+# ── Recent documents (drives the reuse UI) ───────────────────────────────
+
+
+class RecentDoc(BaseModel):
+    id: UUID
+    doc_type: str  # 'purchase_register' | 'supplier_export'
+    original_filename: str
+    file_size_bytes: Optional[int] = None
+    created_at: datetime
+
+
+class RecentDocsOut(BaseModel):
+    pr: Optional[RecentDoc] = None
+    sf: Optional[RecentDoc] = None
