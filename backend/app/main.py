@@ -4,7 +4,20 @@ HishabAI Backend — FastAPI Application Factory
 Main entry point. Registers routers, middleware, exception handlers, and health checks.
 """
 
+import sys
 import asyncio
+
+# Python 3.14 on Windows defaults to ProactorEventLoop, which interacts
+# poorly with httpx socket reads under load — symptom is intermittent
+# `httpx.ReadError [WinError 10035] A non-blocking socket operation could
+# not be completed immediately` when downloading XLSX from Supabase
+# Storage during recon. The selector loop is stable.
+# Refs:
+#   https://docs.python.org/3.14/library/asyncio-eventloop.html#asyncio.WindowsSelectorEventLoopPolicy
+#   https://github.com/encode/httpx/issues — Windows Proactor known-issues thread
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 import os
 import uuid
 from contextlib import asynccontextmanager
