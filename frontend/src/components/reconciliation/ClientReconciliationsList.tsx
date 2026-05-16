@@ -19,15 +19,15 @@ export function ClientReconciliationsList({ clientId }: Props) {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-base">VAT reconciliations</CardTitle>
-        <Link to={`/clients/${clientId}/recon/new`} className={buttonVariants()}>
-          New reconciliation
+        <Link to={`/clients/${clientId}/ingestion/new`} className={buttonVariants()}>
+          Start a new ingestion
         </Link>
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
+          <p className="text-sm text-muted-foreground">Loading…</p>
         ) : !data || data.length === 0 ? (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted-foreground">
             No reconciliations yet. Run one to see Safe ITC and at-risk numbers.
           </p>
         ) : (
@@ -47,7 +47,7 @@ export function ClientReconciliationsList({ clientId }: Props) {
                 {data.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell>{r.period_start} → {r.period_end}</TableCell>
-                    <TableCell className="text-slate-600">{r.status}</TableCell>
+                    <TableCell className="text-muted-foreground">{r.status}</TableCell>
                     <TableCell className="text-right font-mono">{r.total_invoices ?? 0}</TableCell>
                     <TableCell className="text-right font-mono">
                       {formatBDT(r.safe_itc_bdt, { symbol: false })}
@@ -58,7 +58,7 @@ export function ClientReconciliationsList({ clientId }: Props) {
                     <TableCell>
                       <Link
                         to={`/clients/${clientId}/recon/${r.id}`}
-                        className="text-sm text-slate-900 underline"
+                        className="text-sm text-foreground underline"
                       >
                         View
                       </Link>

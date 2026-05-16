@@ -6,7 +6,7 @@ import { EditClientDialog } from "@/components/clients/EditClientDialog"
 import { EntityTypeBadge } from "@/components/clients/EntityTypeBadge"
 import { ClientCalendarTab } from "@/components/compliance/ClientCalendarTab"
 import { ClientReconciliationsList } from "@/components/reconciliation/ClientReconciliationsList"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PageLoading } from "@/components/ui/Loading"
 import { useClient } from "@/hooks/useClients"
@@ -95,12 +95,22 @@ export function ClientDetail() {
 
       <ClientCalendarTab clientId={client.id} />
 
-      <div className="border-t pt-6">
-        <h2 className="text-lg font-semibold text-foreground">Coming in later phases</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Documents tab (file uploads beyond reconciliation) ships in a later phase.
-        </p>
-      </div>
+      <Card>
+        <CardHeader><CardTitle>Documents & ingestion</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Upload purchase-register and supplier-export documents in any format
+            (XLSX, PDF, scans, photos). We'll extract, you review, then we
+            reconcile against NBR data.
+          </p>
+          <Link
+            to={`/clients/${client.id}/ingestion/new`}
+            className={buttonVariants()}
+          >
+            Start ingestion
+          </Link>
+        </CardContent>
+      </Card>
 
       <EditClientDialog client={client} open={editing} onOpenChange={setEditing} />
       <DeleteClientDialog
