@@ -108,6 +108,10 @@ export async function finalizeJob(jobId: string): Promise<FinalizeResponse> {
   return FinalizeResponseSchema.parse(data)
 }
 
+export async function confirmJobReview(jobId: string): Promise<void> {
+  await api.post(`/api/v1/ingestion/jobs/${jobId}/confirm-review`)
+}
+
 export async function startSession(input: SessionStartRequest): Promise<SessionStartResponse> {
   const validated = SessionStartRequestSchema.parse(input)
   const { data } = await api.post("/api/v1/ingestion/sessions/start", validated)

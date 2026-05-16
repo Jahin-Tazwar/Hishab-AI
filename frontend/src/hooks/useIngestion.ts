@@ -4,7 +4,7 @@ import {
 } from "@tanstack/react-query"
 
 import {
-  bulkConfirmRows, confirmRow, createJob, editRow, finalizeJob,
+  bulkConfirmRows, confirmJobReview, confirmRow, createJob, editRow, finalizeJob,
   getJob, listRows, rejectRow, startSession,
   type CreateJobInput, type ListRowsParams,
 } from "@/lib/ingestion/api"
@@ -113,5 +113,13 @@ export function useFinalize(jobId: string) {
 export function useStartSession() {
   return useMutation({
     mutationFn: (input: SessionStartRequest) => startSession(input),
+  })
+}
+
+export function useConfirmJobReview(jobId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => confirmJobReview(jobId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ingestionKeys.job(jobId) }),
   })
 }

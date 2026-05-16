@@ -1,61 +1,107 @@
-import { useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 
-import { ExtractingStep } from "@/components/ingestion/ExtractingStep"
-import { FinalizeStep } from "@/components/ingestion/FinalizeStep"
-import { ReviewStep } from "@/components/ingestion/ReviewStep"
-import { Stepper } from "@/components/ingestion/Stepper"
+import { PurchaseHalf } from "@/components/ingestion/PurchaseHalf"
+import { Stepper, statusToStep } from "@/components/ingestion/Stepper"
+import { SupplierHalf } from "@/components/ingestion/SupplierHalf"
 import { Card, CardContent } from "@/components/ui/card"
-import { useJob } from "@/hooks/useIngestion"
+import { ingestionKeys, useJob } from "@/hooks/useIngestion"
 
 interface Props {
-  jobId: string
+  /** The PR job id (or, in the SF-only / PR-reused case, the SF job id). */
+  prJobId: string
   clientId: string
 }
 
-export function IngestionWizard({ jobId, clientId }: Props) {
-  const { data, isLoading, isError, error } = useJob(jobId)
-  const [forceFinalize, setForceFinalize] = useState(false)
+export function IngestionWizard({ prJobId, clientId }: Props) {
+  const qc = useQueryClient()
+  const primary = useJob(prJobId)
 
-  if (isLoading) {
+  // Derive the secondary job id BEFORE the loading guard so the useJob
+  // hook call below is unconditional (Rules of Hooks).
+  const primaryJob = primary.data?.job
+  const isSfOnlySession =
+    primaryJob?.kind === "supplier_export" && Boolean(primaryJob?.reuse_pr_doc_id)
+  const secondaryJobId =
+    (!isSfOnlySession && primaryJob?.linked_sf_job_id) || undefined
+  const secondary = useJob(secondaryJobId)
+
+  if (primary.isLoading) {
     return <p className="text-sm text-muted-foreground">Loading job…</p>
   }
-  if (isError || !data) {
+  if (primary.isError || !primary.data) {
     return (
       <Card>
         <CardContent className="pt-6 text-sm text-destructive">
-          {(error as Error)?.message ?? "Failed to load job."}
+          {(primary.error as Error)?.message ?? "Failed to load job."}
         </CardContent>
       </Card>
     )
   }
 
-  const { job, files } = data
-  // Placeholder — full combined-wizard step derivation is done in a later task.
-  const step = 1 as const
+  const primaryFiles = primary.data.files
+
+  // SF-only path: the "primary" job IS the SF job. No PR job exists.
+  if (isSfOnlySession) {
+    const step = statusToStep(undefined, primary.data.job)
+    return (
+      <div className="space-y-6">
+        <Stepper activeStep={step} />
+        <SupplierHalf
+          clientId={clientId}
+          periodStart={primary.data.job.period_start}
+          periodEnd={primary.data.job.period_end}
+          sfJob={primary.data.job}
+          files={primaryFiles}
+          onJobCreated={() => { /* SF job already exists in this path */ }}
+        />
+      </div>
+    )
+  }
+
+  // Standard path: PR job is primary. SF job (if any) was already fetched
+  // via `secondary` above.
+  const prJob = primary.data.job
+  const sfJob = secondary.data?.job
+  const sfFiles = secondary.data?.files ?? []
+
+  const step = statusToStep(prJob, sfJob)
+
+  function handleSfCreated(newSfJobId: string) {
+    qc.invalidateQueries({ queryKey: ingestionKeys.job(prJob.id) })
+    qc.invalidateQueries({ queryKey: ingestionKeys.job(newSfJobId) })
+  }
 
   return (
     <div className="space-y-6">
       <Stepper activeStep={step} />
-      {(job.status === "pending" || job.status === "extracting") && (
-        <ExtractingStep
-          files={files}
-          filesDone={job.files_done}
-          filesTotal={job.files_total}
+
+      {/* Half 1: Purchase register — shown while PR is not yet confirmed
+          (waiting on user to advance via confirm-review). */}
+      {(prJob.status !== "confirmed" && prJob.status !== "completed") && (
+        <PurchaseHalf
+          clientId={clientId}
+          periodStart={prJob.period_start}
+          periodEnd={prJob.period_end}
+          prJob={prJob}
+          files={primaryFiles}
+          onContinueToSupplier={() => {
+            qc.invalidateQueries({ queryKey: ingestionKeys.job(prJob.id) })
+          }}
+          onJobCreated={() => { /* PR job already exists in this branch */ }}
         />
       )}
-      {job.status === "ready_for_review" && !forceFinalize && (
-        <ReviewStep
-          job={job}
-          files={files}
-          onFinalize={() => setForceFinalize(true)}
+
+      {/* Half 2: Supplier export — shown once PR is confirmed/completed. */}
+      {(prJob.status === "confirmed" || prJob.status === "completed") && (
+        <SupplierHalf
+          clientId={clientId}
+          periodStart={prJob.period_start}
+          periodEnd={prJob.period_end}
+          sfJob={sfJob}
+          files={sfFiles}
+          linkedPrJobId={prJob.id}
+          onJobCreated={handleSfCreated}
         />
-      )}
-      {(job.status === "confirmed"
-        || job.status === "reconciling"
-        || job.status === "completed"
-        || job.status === "failed"
-        || (job.status === "ready_for_review" && forceFinalize)) && (
-        <FinalizeStep job={job} clientId={clientId} />
       )}
     </div>
   )

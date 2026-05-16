@@ -365,3 +365,25 @@ async def start_session(
         period_start=period_start, period_end=period_end,
     )
     return {"reconciliation_id": None, "pr_job_id": pr_job_id, "sf_job_id": None}
+
+
+async def confirm_job_review(*, job_id: UUID, tenant_id: UUID) -> None:
+    """Idempotent ready_for_review → confirmed transition. Does NOT trigger handoff.
+
+    Used by the combined wizard when the user has reviewed PR rows and wants to
+    proceed to the SF upload step — the SF finalize will trigger the actual
+    handoff.
+    """
+    job = await p.get_job(job_id, tenant_id=tenant_id)
+    if job is None:
+        raise JobNotFoundError(message=f"Job {job_id} not found")
+    needs = await p.count_needs_review(job_id, tenant_id=tenant_id)
+    if needs > 0:
+        err = IngestionError(message=f"{needs} rows still need review")
+        err.code = "INGESTION_REVIEW_INCOMPLETE"; err.status_code = 422
+        raise err
+    current = JobStatus(job["status"])
+    if current == JobStatus.CONFIRMED:
+        return  # idempotent
+    assert_can_transition(current, JobStatus.CONFIRMED)
+    await p.update_job_status(job_id, JobStatus.CONFIRMED, tenant_id=tenant_id)

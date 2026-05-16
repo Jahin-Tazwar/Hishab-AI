@@ -320,6 +320,22 @@ async def start_session_endpoint(
     return SessionStartResponse(**result)
 
 
+@router.post("/jobs/{job_id}/confirm-review")
+async def confirm_review_endpoint(
+    job_id: UUID,
+    tenant_id: UUID = Depends(get_current_tenant_id),
+) -> dict:
+    try:
+        await svc.confirm_job_review(job_id=job_id, tenant_id=tenant_id)
+    except JobNotFoundError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    except IngestionError as e:
+        raise HTTPException(status_code=e.status_code, detail={
+            "code": e.code, "message": e.message, "details": e.details,
+        })
+    return {"ok": True}
+
+
 @router.get("/documents/recent", response_model=RecentDocsOut)
 async def list_recent_docs_endpoint(
     client_id: UUID,

@@ -18,7 +18,7 @@ export function IngestionJob() {
         ]}
         title="Ingestion job"
       />
-      <IngestionWizard jobId={jobId} clientId={clientId} />
+      <IngestionWizard prJobId={jobId} clientId={clientId} />
     </div>
   )
 }
