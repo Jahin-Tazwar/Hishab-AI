@@ -2,22 +2,57 @@
 import { Check } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import type { JobStatus } from "@/types/ingestion"
+import type { JobOut } from "@/types/ingestion"
 
-const STEPS = ["Upload", "Extract", "Review", "Finalize"] as const
-export type StepIndex = 1 | 2 | 3 | 4
+const STEPS = ["Setup", "Purchase register", "Supplier export", "Reconcile", "Done"] as const
+export type StepIndex = 1 | 2 | 3 | 4 | 5
 
-export function statusToStep(status: JobStatus): StepIndex {
-  switch (status) {
-    case "pending":          return 1
-    case "extracting":       return 2
-    case "ready_for_review": return 3
-    case "confirmed":
-    case "reconciling":
-    case "completed":
-    case "failed":
-      return 4
+/**
+ * Derive the active wizard step from the combined PR + SF job state.
+ *
+ *   undefined + undefined            → 1  Setup
+ *   active PR + no SF                → 2  Purchase register
+ *   PR confirmed + active SF         → 3  Supplier export
+ *   SF reconciling                   → 4  Reconcile
+ *   PR confirmed with reuse_sf       → 4  Reconcile (no SF job created)
+ *   SF completed (terminal)          → 5  Done
+ */
+export function statusToStep(
+  prJob: JobOut | undefined,
+  sfJob: JobOut | undefined,
+): StepIndex {
+  if (!prJob && !sfJob) return 1
+
+  // SF-only session (PR reused at session start, no PR job exists).
+  if (!prJob && sfJob) {
+    if (sfJob.status === "completed") return 5
+    if (sfJob.status === "reconciling") return 4
+    if (sfJob.status === "confirmed") return 4
+    return 3 // pending | extracting | ready_for_review | failed
   }
+
+  const pr = prJob!
+  const prIsTerminal = pr.status === "confirmed" || pr.status === "completed"
+
+  // Combined-completion: both halves done.
+  if (pr.status === "completed" && (!sfJob || sfJob.status === "completed")) return 5
+
+  if (!prIsTerminal) return 2
+
+  // PR is confirmed/completed. If PR was created with reuse_sf_doc_id and SF
+  // job was therefore never spawned, finalize runs from the PR job itself.
+  if (!sfJob) {
+    if (pr.reuse_sf_doc_id) {
+      return 4
+    }
+    return 3 // PR confirmed, awaiting SF upload
+  }
+
+  // SF job exists.
+  if (sfJob.status === "reconciling") return 4
+  if (sfJob.status === "completed") return 5
+  if (sfJob.status === "confirmed") return 4
+  return 3
 }
 
 interface Props {

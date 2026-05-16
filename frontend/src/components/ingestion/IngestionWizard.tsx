@@ -3,7 +3,7 @@ import { useState } from "react"
 import { ExtractingStep } from "@/components/ingestion/ExtractingStep"
 import { FinalizeStep } from "@/components/ingestion/FinalizeStep"
 import { ReviewStep } from "@/components/ingestion/ReviewStep"
-import { Stepper, statusToStep } from "@/components/ingestion/Stepper"
+import { Stepper } from "@/components/ingestion/Stepper"
 import { Card, CardContent } from "@/components/ui/card"
 import { useJob } from "@/hooks/useIngestion"
 
@@ -30,7 +30,8 @@ export function IngestionWizard({ jobId, clientId }: Props) {
   }
 
   const { job, files } = data
-  const step = statusToStep(job.status)
+  // Placeholder — full combined-wizard step derivation is done in a later task.
+  const step = 1 as const
 
   return (
     <div className="space-y-6">
