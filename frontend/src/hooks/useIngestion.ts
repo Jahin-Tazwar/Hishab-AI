@@ -5,10 +5,10 @@ import {
 
 import {
   bulkConfirmRows, confirmRow, createJob, editRow, finalizeJob,
-  getJob, listRows, rejectRow,
+  getJob, listRows, rejectRow, startSession,
   type CreateJobInput, type ListRowsParams,
 } from "@/lib/ingestion/api"
-import type { ExtractedRowData, JobStatus } from "@/types/ingestion"
+import type { ExtractedRowData, JobStatus, SessionStartRequest } from "@/types/ingestion"
 
 export const ingestionKeys = {
   all: ["ingestion"] as const,
@@ -107,5 +107,11 @@ export function useFinalize(jobId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ingestionKeys.job(jobId) })
     },
+  })
+}
+
+export function useStartSession() {
+  return useMutation({
+    mutationFn: (input: SessionStartRequest) => startSession(input),
   })
 }
