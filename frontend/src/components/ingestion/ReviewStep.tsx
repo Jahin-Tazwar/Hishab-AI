@@ -15,9 +15,11 @@ interface Props {
   job: JobOut
   files: IngestionFileOut[]
   onFinalize: () => void
+  /** Defaults to "Finalize → run reconciliation". */
+  confirmCtaLabel?: string
 }
 
-export function ReviewStep({ job, files, onFinalize }: Props) {
+export function ReviewStep({ job, files, onFinalize, confirmCtaLabel }: Props) {
   const [filter, setFilter] = useState<Filter>("needs_review")
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [openRowId, setOpenRowId] = useState<string | null>(null)
@@ -100,7 +102,7 @@ export function ReviewStep({ job, files, onFinalize }: Props) {
               disabled={finalizeDisabled}
               title={finalizeReason}
             >
-              Finalize → run reconciliation
+              {confirmCtaLabel ?? "Finalize → run reconciliation"}
             </Button>
           </div>
         </CardContent>
