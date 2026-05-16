@@ -76,6 +76,10 @@ export const JobOutSchema = z.object({
   rows_needs_review: z.number().int(),
   error_summary: z.string().nullable().optional(),
   reconciliation_id: Uuid.nullable().optional(),
+  linked_pr_job_id: Uuid.nullable().optional(),
+  linked_sf_job_id: Uuid.nullable().optional(),
+  reuse_pr_doc_id: Uuid.nullable().optional(),
+  reuse_sf_doc_id: Uuid.nullable().optional(),
   created_at: IsoDateTime,
   updated_at: IsoDateTime,
   completed_at: IsoDateTime.nullable().optional(),
@@ -131,3 +135,38 @@ export const FinalizeResponseSchema = z.object({
   reconciliation_id: Uuid,
 })
 export type FinalizeResponse = z.infer<typeof FinalizeResponseSchema>
+
+// ── Session start ─────────────────────────────────────────────────────────
+
+export const SessionStartRequestSchema = z.object({
+  client_id: Uuid,
+  period_start: IsoDate,
+  period_end: IsoDate,
+  reuse_pr_doc_id: Uuid.nullable().optional(),
+  reuse_sf_doc_id: Uuid.nullable().optional(),
+})
+export type SessionStartRequest = z.infer<typeof SessionStartRequestSchema>
+
+export const SessionStartResponseSchema = z.object({
+  pr_job_id: Uuid.nullable().optional(),
+  sf_job_id: Uuid.nullable().optional(),
+  reconciliation_id: Uuid.nullable().optional(),
+})
+export type SessionStartResponse = z.infer<typeof SessionStartResponseSchema>
+
+// ── Recent documents ──────────────────────────────────────────────────────
+
+export const RecentDocSchema = z.object({
+  id: Uuid,
+  doc_type: z.enum(["purchase_register", "supplier_export"]),
+  original_filename: z.string(),
+  file_size_bytes: z.number().int().nullable().optional(),
+  created_at: IsoDateTime,
+})
+export type RecentDoc = z.infer<typeof RecentDocSchema>
+
+export const RecentDocsOutSchema = z.object({
+  pr: RecentDocSchema.nullable().optional(),
+  sf: RecentDocSchema.nullable().optional(),
+})
+export type RecentDocsOut = z.infer<typeof RecentDocsOutSchema>
