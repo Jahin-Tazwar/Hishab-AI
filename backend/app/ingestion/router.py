@@ -42,22 +42,33 @@ async def create_job_endpoint(
     period_end: date = Form(...),
     kind: JobKind = Form(...),
     files: list[UploadFile] = File(...),
+    linked_pr_job_id: Optional[UUID] = Form(None),
+    reuse_pr_doc_id: Optional[UUID] = Form(None),
+    reuse_sf_doc_id: Optional[UUID] = Form(None),
     tenant_id: UUID = Depends(get_current_tenant_id),
     user_id: UUID = Depends(get_current_user_id),
 ) -> CreateJobResponse:
     if period_end < period_start:
         raise HTTPException(status_code=400, detail="period_end < period_start")
-    return await svc.create_job(
-        tenant_id=tenant_id, user_id=user_id,
-        client_id=client_id, period_start=period_start, period_end=period_end,
-        kind=kind, files=files,
-    )
+    try:
+        return await svc.create_job(
+            tenant_id=tenant_id, user_id=user_id,
+            client_id=client_id, period_start=period_start, period_end=period_end,
+            kind=kind, files=files,
+            linked_pr_job_id=linked_pr_job_id,
+            reuse_pr_doc_id=reuse_pr_doc_id,
+            reuse_sf_doc_id=reuse_sf_doc_id,
+        )
+    except IngestionError as e:
+        raise HTTPException(status_code=e.status_code, detail={
+            "code": e.code, "message": e.message, "details": e.details,
+        })
 
 
 # ── GET /jobs/{id} ─────────────────────────────────────────────────────
 
 
-def _job_row_to_out(row: dict) -> JobOut:
+def _job_row_to_out(row: dict, *, linked_sf_job_id: Optional[UUID] = None) -> JobOut:
     return JobOut(**{
         "id": row["id"], "tenant_id": row["tenant_id"], "client_id": row["client_id"],
         "kind": row["kind"], "period_start": row["period_start"],
@@ -66,6 +77,10 @@ def _job_row_to_out(row: dict) -> JobOut:
         "rows_total": row["rows_total"], "rows_needs_review": row["rows_needs_review"],
         "error_summary": row.get("error_summary"),
         "reconciliation_id": row.get("reconciliation_id"),
+        "linked_pr_job_id": row.get("linked_pr_job_id"),
+        "linked_sf_job_id": str(linked_sf_job_id) if linked_sf_job_id else None,
+        "reuse_pr_doc_id": row.get("reuse_pr_doc_id"),
+        "reuse_sf_doc_id": row.get("reuse_sf_doc_id"),
         "created_at": row["created_at"], "updated_at": row["updated_at"],
         "completed_at": row.get("completed_at"),
     })
@@ -91,9 +106,13 @@ async def get_job_endpoint(
     job = await p.get_job(job_id, tenant_id=tenant_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
+    # If this is a PR job, look up any SF job that linked back to it.
+    linked_sf_job_id: Optional[UUID] = None
+    if job["kind"] == "purchase_register":
+        linked_sf_job_id = await p.find_linked_sf_job_id(job_id, tenant_id=tenant_id)
     files = await p.list_files(job_id, tenant_id=tenant_id)
     return JobDetailOut(
-        job=_job_row_to_out(job),
+        job=_job_row_to_out(job, linked_sf_job_id=linked_sf_job_id),
         files=[_file_row_to_out(f) for f in files],
     )
 
@@ -270,3 +289,49 @@ async def confirm_mapping_endpoint(
 
     await _aio.to_thread(_u)
     return {"ok": True}
+
+
+from app.ingestion.schemas import (
+    RecentDoc,
+    RecentDocsOut,
+    SessionStartRequest,
+    SessionStartResponse,
+)
+
+
+@router.post("/sessions/start", response_model=SessionStartResponse)
+async def start_session_endpoint(
+    body: SessionStartRequest,
+    tenant_id: UUID = Depends(get_current_tenant_id),
+    user_id: UUID = Depends(get_current_user_id),
+) -> SessionStartResponse:
+    try:
+        result = await svc.start_session(
+            tenant_id=tenant_id, user_id=user_id,
+            client_id=body.client_id,
+            period_start=body.period_start, period_end=body.period_end,
+            reuse_pr_doc_id=body.reuse_pr_doc_id,
+            reuse_sf_doc_id=body.reuse_sf_doc_id,
+        )
+    except IngestionError as e:
+        raise HTTPException(status_code=e.status_code, detail={
+            "code": e.code, "message": e.message, "details": e.details,
+        })
+    return SessionStartResponse(**result)
+
+
+@router.get("/documents/recent", response_model=RecentDocsOut)
+async def list_recent_docs_endpoint(
+    client_id: UUID,
+    period_start: date,
+    period_end: date,
+    tenant_id: UUID = Depends(get_current_tenant_id),
+) -> RecentDocsOut:
+    pr_row, sf_row = await p.find_recent_docs(
+        tenant_id=tenant_id, client_id=client_id,
+        period_start=period_start, period_end=period_end,
+    )
+    return RecentDocsOut(
+        pr=RecentDoc(**pr_row) if pr_row else None,
+        sf=RecentDoc(**sf_row) if sf_row else None,
+    )
