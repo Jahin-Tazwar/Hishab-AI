@@ -48,12 +48,12 @@ export function Login() {
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-1">
             <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" {...register("email")} />
+            <Input id="email" type="email" autoComplete="email" aria-invalid={Boolean(errors.email)} {...register("email")} />
             {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
           </div>
           <div className="space-y-1">
             <Label htmlFor="password">Password</Label>
-            <Input id="password" type="password" {...register("password")} />
+            <Input id="password" type="password" autoComplete="current-password" aria-invalid={Boolean(errors.password)} {...register("password")} />
             {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
           </div>
           <Button type="submit" disabled={submitting} className="w-full">
