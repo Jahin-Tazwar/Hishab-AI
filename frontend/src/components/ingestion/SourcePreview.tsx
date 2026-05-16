@@ -21,6 +21,7 @@ export function SourcePreview({ jobId, file, pageNo }: Props) {
 
   useEffect(() => {
     let revoked = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setObjectUrl(null)
     if (!file) return
     api.get(filePreviewUrl(jobId, file.id), { responseType: "blob" })

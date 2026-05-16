@@ -13,7 +13,7 @@ describe("statusToStep", () => {
     ["completed", 4],
     ["failed", 4],
   ] as const)("maps %s to step %d", (status, step) => {
-    expect(statusToStep(status as any)).toBe(step)
+    expect(statusToStep(status)).toBe(step)
   })
 })
 
