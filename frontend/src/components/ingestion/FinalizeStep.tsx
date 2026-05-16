@@ -1,5 +1,5 @@
 // frontend/src/components/ingestion/FinalizeStep.tsx
-import { CheckCircle2, Loader2, XCircle } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Loader2, XCircle } from "lucide-react"
 import { useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
@@ -12,11 +12,15 @@ import type { JobOut } from "@/types/ingestion"
 interface Props {
   job: JobOut
   clientId: string
+  /** Override the job whose `finalize` endpoint gets called. Defaults to `job.id`.
+   *  Set this when the wizard is showing the SF job but finalize should target the PR job, or vice versa. */
+  finalizeJobId?: string
 }
 
-export function FinalizeStep({ job, clientId }: Props) {
+export function FinalizeStep({ job, clientId, finalizeJobId }: Props) {
   const navigate = useNavigate()
-  const finalize = useFinalize(job.id)
+  const targetId = finalizeJobId ?? job.id
+  const finalize = useFinalize(targetId)
 
   // Auto-navigate when reconciliation completes
   useEffect(() => {
@@ -77,10 +81,23 @@ export function FinalizeStep({ job, clientId }: Props) {
     )
   }
 
+  // status === "confirmed": ready to finalize, optionally with a previous-attempt error banner.
   return (
     <Card>
       <CardHeader><CardTitle>Ready to finalize</CardTitle></CardHeader>
       <CardContent className="space-y-3">
+        {job.error_summary && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm"
+          >
+            <AlertTriangle className="size-4 mt-0.5 text-destructive" aria-hidden />
+            <div>
+              <p className="font-medium text-destructive">Last attempt failed</p>
+              <p className="text-foreground/80">{job.error_summary}</p>
+            </div>
+          </div>
+        )}
         <p className="text-sm text-muted-foreground">
           {job.rows_total} row(s) confirmed. Click below to run reconciliation.
         </p>
