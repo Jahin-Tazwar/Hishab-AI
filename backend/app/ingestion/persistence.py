@@ -38,23 +38,29 @@ async def create_job(
     kind: JobKind,
     period_start: date,
     period_end: date,
+    linked_pr_job_id: Optional[UUID] = None,
+    reuse_pr_doc_id: Optional[UUID] = None,
+    reuse_sf_doc_id: Optional[UUID] = None,
 ) -> UUID:
     sb = get_supabase_admin()
+    payload: dict[str, Any] = {
+        "tenant_id": str(tenant_id),
+        "client_id": str(client_id),
+        "created_by": str(created_by),
+        "kind": kind.value,
+        "period_start": period_start.isoformat(),
+        "period_end": period_end.isoformat(),
+        "status": JobStatus.PENDING.value,
+    }
+    if linked_pr_job_id is not None:
+        payload["linked_pr_job_id"] = str(linked_pr_job_id)
+    if reuse_pr_doc_id is not None:
+        payload["reuse_pr_doc_id"] = str(reuse_pr_doc_id)
+    if reuse_sf_doc_id is not None:
+        payload["reuse_sf_doc_id"] = str(reuse_sf_doc_id)
 
     def _insert():
-        return (
-            sb.table(_TBL_JOBS)
-            .insert({
-                "tenant_id": str(tenant_id),
-                "client_id": str(client_id),
-                "created_by": str(created_by),
-                "kind": kind.value,
-                "period_start": period_start.isoformat(),
-                "period_end": period_end.isoformat(),
-                "status": JobStatus.PENDING.value,
-            })
-            .execute()
-        )
+        return sb.table(_TBL_JOBS).insert(payload).execute()
 
     res = await asyncio.to_thread(_insert)
     return UUID(res.data[0]["id"])
@@ -75,6 +81,26 @@ async def get_job(job_id: UUID, *, tenant_id: UUID) -> Optional[dict[str, Any]]:
 
     res = await asyncio.to_thread(_q)
     return res.data[0] if res.data else None
+
+
+async def find_linked_sf_job_id(
+    pr_job_id: UUID, *, tenant_id: UUID,
+) -> Optional[UUID]:
+    """Reverse lookup: given a PR job, find the SF job that linked to it."""
+    sb = get_supabase_admin()
+
+    def _q():
+        return (
+            sb.table(_TBL_JOBS)
+            .select("id")
+            .eq("linked_pr_job_id", str(pr_job_id))
+            .eq("tenant_id", str(tenant_id))
+            .limit(1)
+            .execute()
+        )
+
+    res = await asyncio.to_thread(_q)
+    return UUID(res.data[0]["id"]) if res.data else None
 
 
 async def update_job_status(
@@ -417,6 +443,78 @@ async def list_confirmed_rows(
 
     res = await asyncio.to_thread(_q)
     return res.data or []
+
+
+# ── Documents lookups + job pair completion ──────────────────────────────
+
+
+async def find_recent_docs(
+    *, tenant_id: UUID, client_id: UUID,
+    period_start: date, period_end: date,
+) -> tuple[Optional[dict[str, Any]], Optional[dict[str, Any]]]:
+    """Most-recent PR + SF documents matching the (client, period) tuple."""
+    sb = get_supabase_admin()
+
+    def _q(doc_type: str) -> Optional[dict[str, Any]]:
+        res = (
+            sb.table("documents")
+            .select("id, doc_type, original_filename, file_size_bytes, created_at")
+            .eq("tenant_id", str(tenant_id))
+            .eq("client_id", str(client_id))
+            .eq("doc_type", doc_type)
+            .is_("deleted_at", "null")
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        return res.data[0] if res.data else None
+
+    pr = await asyncio.to_thread(_q, "purchase_register")
+    sf = await asyncio.to_thread(_q, "supplier_export")
+    return pr, sf
+
+
+async def find_doc_by_id(
+    doc_id: UUID, *, tenant_id: UUID, client_id: UUID,
+) -> Optional[dict[str, Any]]:
+    """Lookup a single document scoped to the caller's tenant + client."""
+    sb = get_supabase_admin()
+
+    def _q():
+        return (
+            sb.table("documents")
+            .select("id, doc_type, tenant_id, client_id, storage_path, deleted_at")
+            .eq("id", str(doc_id))
+            .eq("tenant_id", str(tenant_id))
+            .eq("client_id", str(client_id))
+            .is_("deleted_at", "null")
+            .limit(1)
+            .execute()
+        )
+
+    res = await asyncio.to_thread(_q)
+    return res.data[0] if res.data else None
+
+
+async def complete_jobs_pair(
+    *, primary_job_id: UUID, partner_job_id: Optional[UUID],
+    tenant_id: UUID, reconciliation_id: UUID,
+) -> None:
+    """Atomic-ish: mark primary + partner (if set) as COMPLETED with the
+    same reconciliation_id. Two updates; not wrapped in a DB transaction
+    because supabase-py's PostgREST client does not expose one — the
+    caller invokes this only after `run_reconciliation` has succeeded,
+    so a partial failure here surfaces in logs and a manual re-run.
+    """
+    await update_job_status(
+        primary_job_id, JobStatus.COMPLETED, tenant_id=tenant_id,
+        reconciliation_id=reconciliation_id,
+    )
+    if partner_job_id is not None:
+        await update_job_status(
+            partner_job_id, JobStatus.COMPLETED, tenant_id=tenant_id,
+            reconciliation_id=reconciliation_id,
+        )
 
 
 # ── Column mappings cache ────────────────────────────────────────────────
