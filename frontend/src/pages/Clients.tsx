@@ -5,10 +5,12 @@ import { ClientsTable } from "@/components/clients/ClientsTable"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Input } from "@/components/ui/input"
 import { useClientsList } from "@/hooks/useClients"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 
 export function Clients() {
   const [search, setSearch] = useState("")
-  const { data: clients = [], isLoading } = useClientsList(search)
+  const debounced = useDebouncedValue(search, 250)
+  const { data: clients = [], isLoading } = useClientsList(debounced)
 
   return (
     <div className="space-y-6">
@@ -22,6 +24,7 @@ export function Clients() {
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="max-w-sm"
+        autoFocus
       />
       <ClientsTable clients={clients} isLoading={isLoading} />
     </div>
