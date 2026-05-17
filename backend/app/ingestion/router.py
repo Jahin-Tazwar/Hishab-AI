@@ -65,6 +65,36 @@ async def create_job_endpoint(
         })
 
 
+# ── POST /jobs/{id}/files ──────────────────────────────────────────────
+
+
+@router.post(
+    "/jobs/{job_id}/files", status_code=status.HTTP_200_OK,
+    response_model=CreateJobResponse,
+)
+async def add_job_files_endpoint(
+    job_id: UUID,
+    files: list[UploadFile] = File(...),
+    tenant_id: UUID = Depends(get_current_tenant_id),
+) -> CreateJobResponse:
+    """Upload additional files into an existing PENDING job.
+
+    Used by the combined-ingestion wizard: `POST /sessions/start` pre-creates
+    an empty PR (or SF) job; this endpoint accepts the user's actual files
+    and kicks off extraction.
+    """
+    try:
+        return await svc.add_job_files(
+            job_id=job_id, tenant_id=tenant_id, files=files,
+        )
+    except JobNotFoundError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    except IngestionError as e:
+        raise HTTPException(status_code=e.status_code, detail={
+            "code": e.code, "message": e.message, "details": e.details,
+        })
+
+
 # ── GET /jobs/{id} ─────────────────────────────────────────────────────
 
 

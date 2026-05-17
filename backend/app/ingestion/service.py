@@ -91,6 +91,66 @@ async def _validate_reuse_doc(
         raise err
 
 
+async def _persist_uploaded_files(
+    *, job_id: UUID, tenant_id: UUID, kind: JobKind, files: list[UploadFile],
+) -> list[CreateJobFileSummary]:
+    """Validate, store and persist each upload against an existing job.
+
+    Returns a per-file summary in the same order as the input list. Files that
+    fail validation are returned with `accepted=False` and a `rejection_reason`;
+    the caller decides whether that constitutes a hard error.
+    """
+    summaries: list[CreateJobFileSummary] = []
+    for upload in files:
+        content = await upload.read()
+        size = len(content)
+        try:
+            if size > _MAX_BYTES:
+                raise FileTooLargeError(
+                    filename=upload.filename or "<unnamed>",
+                    size=size, max_size=_MAX_BYTES,
+                )
+            mime = upload.content_type or "application/octet-stream"
+            select_engine_name(
+                file_bytes=content[:4096], mime=mime,
+                kind=kind, filename=upload.filename or "<unnamed>",
+            )
+        except (UnsupportedFileTypeError, FileTooLargeError) as e:
+            summaries.append(CreateJobFileSummary(
+                file_id=UUID(int=0), original_filename=upload.filename or "<unnamed>",
+                mime_type=upload.content_type or "", byte_size=size,
+                accepted=False, rejection_reason=e.message,
+            ))
+            continue
+
+        file_id = await p.add_file(
+            job_id=job_id, tenant_id=tenant_id,
+            storage_path="placeholder", original_filename=upload.filename or "<unnamed>",
+            mime_type=mime, byte_size=size,
+        )
+        path = await st.upload_original(
+            tenant_id=tenant_id, job_id=job_id, file_id=file_id,
+            filename=upload.filename or f"file-{file_id}", content=content,
+            mime_type=mime,
+        )
+        # Patch the real storage_path (add_file used a placeholder)
+        from app.database import get_supabase_admin
+        sb = get_supabase_admin()
+
+        def _patch():
+            sb.table("ingestion_files").update({"storage_path": path}).eq(
+                "id", str(file_id)
+            ).execute()
+
+        await asyncio.to_thread(_patch)
+
+        summaries.append(CreateJobFileSummary(
+            file_id=file_id, original_filename=upload.filename or "<unnamed>",
+            mime_type=mime, byte_size=size, accepted=True,
+        ))
+    return summaries
+
+
 async def create_job(
     *,
     tenant_id: UUID,
@@ -144,56 +204,53 @@ async def create_job(
         reuse_sf_doc_id=reuse_sf_doc_id,
     )
 
-    summaries: list[CreateJobFileSummary] = []
-    for upload in files:
-        content = await upload.read()
-        size = len(content)
-        try:
-            if size > _MAX_BYTES:
-                raise FileTooLargeError(
-                    filename=upload.filename or "<unnamed>",
-                    size=size, max_size=_MAX_BYTES,
-                )
-            mime = upload.content_type or "application/octet-stream"
-            select_engine_name(
-                file_bytes=content[:4096], mime=mime,
-                kind=kind, filename=upload.filename or "<unnamed>",
-            )
-        except (UnsupportedFileTypeError, FileTooLargeError) as e:
-            summaries.append(CreateJobFileSummary(
-                file_id=UUID(int=0), original_filename=upload.filename or "<unnamed>",
-                mime_type=upload.content_type or "", byte_size=size,
-                accepted=False, rejection_reason=e.message,
-            ))
-            continue
-
-        file_id = await p.add_file(
-            job_id=job_id, tenant_id=tenant_id,
-            storage_path="placeholder", original_filename=upload.filename or "<unnamed>",
-            mime_type=mime, byte_size=size,
-        )
-        path = await st.upload_original(
-            tenant_id=tenant_id, job_id=job_id, file_id=file_id,
-            filename=upload.filename or f"file-{file_id}", content=content,
-            mime_type=mime,
-        )
-        # Patch the real storage_path (add_file used a placeholder)
-        from app.database import get_supabase_admin
-        sb = get_supabase_admin()
-
-        def _patch():
-            sb.table("ingestion_files").update({"storage_path": path}).eq(
-                "id", str(file_id)
-            ).execute()
-
-        await asyncio.to_thread(_patch)
-
-        summaries.append(CreateJobFileSummary(
-            file_id=file_id, original_filename=upload.filename or "<unnamed>",
-            mime_type=mime, byte_size=size, accepted=True,
-        ))
+    summaries = await _persist_uploaded_files(
+        job_id=job_id, tenant_id=tenant_id, kind=kind, files=files,
+    )
 
     # Kick off the worker for this specific job (parallel to the polling loop)
+    asyncio.create_task(claim_and_run(job_id, tenant_id))
+
+    return CreateJobResponse(job_id=job_id, files=summaries)
+
+
+async def add_job_files(
+    *, job_id: UUID, tenant_id: UUID, files: list[UploadFile],
+) -> CreateJobResponse:
+    """Add files to an existing PENDING job and kick off extraction.
+
+    Used by the combined-ingestion wizard: `start_session` pre-creates an empty
+    PR (or SF) job, and the user then uploads files into it via this endpoint.
+    Rejects jobs that are no longer PENDING — once extraction has started,
+    files cannot be added.
+    """
+    if not files:
+        raise UnsupportedFileTypeError(filename="", mime="(no files)")
+    if len(files) > _MAX_FILES:
+        raise UnsupportedFileTypeError(
+            filename=f"<{len(files)} files>",
+            mime=f"max {_MAX_FILES} files per job",
+        )
+
+    job = await p.get_job(job_id, tenant_id=tenant_id)
+    if job is None:
+        raise JobNotFoundError(message=f"Job {job_id} not found")
+    current = JobStatus(job["status"])
+    if current != JobStatus.PENDING:
+        err = IngestionError(
+            message=f"Cannot add files to job in status {current.value}; only PENDING jobs accept new files",
+        )
+        err.code = "INGESTION_INVALID_STATE_FOR_UPLOAD"
+        err.status_code = 409
+        raise err
+
+    summaries = await _persist_uploaded_files(
+        job_id=job_id, tenant_id=tenant_id,
+        kind=JobKind(job["kind"]), files=files,
+    )
+
+    # Kick off the worker for this specific job (the poller would pick it up
+    # anyway, but firing immediately keeps the UX snappy).
     asyncio.create_task(claim_and_run(job_id, tenant_id))
 
     return CreateJobResponse(job_id=job_id, files=summaries)

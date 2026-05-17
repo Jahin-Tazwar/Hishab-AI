@@ -50,6 +50,18 @@ export async function createJob(input: CreateJobInput): Promise<CreateJobRespons
   return CreateJobResponseSchema.parse(data)
 }
 
+/** Add files to an existing PENDING job (used by the combined wizard). */
+export async function addJobFiles(
+  jobId: string, files: File[],
+): Promise<CreateJobResponse> {
+  const fd = new FormData()
+  for (const f of files) fd.append("files", f, f.name)
+  const { data } = await api.post(`/api/v1/ingestion/jobs/${jobId}/files`, fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+  })
+  return CreateJobResponseSchema.parse(data)
+}
+
 export async function getJob(jobId: string): Promise<JobDetailOut> {
   const { data } = await api.get(`/api/v1/ingestion/jobs/${jobId}`)
   return JobDetailOutSchema.parse(data)

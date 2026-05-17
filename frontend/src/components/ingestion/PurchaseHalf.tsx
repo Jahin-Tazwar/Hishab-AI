@@ -41,6 +41,25 @@ export function PurchaseHalf({
     )
   }
 
+  // Empty PENDING job (start_session pre-created it; user hasn't uploaded
+  // yet). Render UploadStep that appends files to the existing job rather
+  // than the ExtractingStep — there's nothing to extract yet.
+  if (prJob.status === "pending" && prJob.files_total === 0) {
+    return (
+      <div className="space-y-3">
+        <HalfHeader half="purchase_register" subState="upload" />
+        <UploadStep
+          clientId={clientId}
+          kind="purchase_register"
+          periodStart={periodStart}
+          periodEnd={periodEnd}
+          existingJobId={prJob.id}
+          onCreated={onJobCreated}
+        />
+      </div>
+    )
+  }
+
   if (prJob.status === "pending" || prJob.status === "extracting") {
     return (
       <div className="space-y-3">

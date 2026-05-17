@@ -139,6 +139,14 @@ async def process_job(job_id: UUID, *, tenant_id: UUID) -> None:
         log.warning("ingestion.worker.job_not_found", job_id=str(job_id))
         return
 
+    # Defensive: never auto-advance a job that has no files. The session-start
+    # flow pre-creates an empty PR/SF job and waits for the user to upload via
+    # the add-files endpoint; if the worker grabbed such a job it would
+    # transition it to ready_for_review with 0 rows.
+    if (job.get("files_total") or 0) == 0:
+        log.info("ingestion.worker.skip_empty_job", job_id=str(job_id))
+        return
+
     await p.update_job_status(job_id, JobStatus.EXTRACTING, tenant_id=tenant_id)
     files = await p.list_files(job_id, tenant_id=tenant_id)
     pending = [f for f in files if f["status"] in (
@@ -222,8 +230,9 @@ async def poll_pending_jobs(*, sleep_s: float = 5.0) -> None:
             def _q():
                 return (
                     sb.table("ingestion_jobs")
-                    .select("id, tenant_id, status, updated_at")
+                    .select("id, tenant_id, status, updated_at, files_total")
                     .in_("status", [JobStatus.PENDING.value, JobStatus.EXTRACTING.value])
+                    .gt("files_total", 0)
                     .order("created_at")
                     .limit(20)
                     .execute()

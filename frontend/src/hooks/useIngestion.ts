@@ -4,6 +4,7 @@ import {
 } from "@tanstack/react-query"
 
 import {
+  addJobFiles,
   bulkConfirmRows, confirmJobReview, confirmRow, createJob, editRow, finalizeJob,
   getJob, listRows, rejectRow, startSession,
   type CreateJobInput, type ListRowsParams,
@@ -52,6 +53,15 @@ export function useJobRows(
 export function useCreateJob() {
   return useMutation({
     mutationFn: (input: CreateJobInput) => createJob(input),
+  })
+}
+
+/** Adds files to an existing PENDING job. Invalidates the job query on success. */
+export function useAddJobFiles(jobId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (files: File[]) => addJobFiles(jobId, files),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ingestionKeys.job(jobId) }),
   })
 }
 
