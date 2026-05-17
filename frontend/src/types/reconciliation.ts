@@ -80,6 +80,22 @@ export interface DiscrepancyFlags {
   reason?: string | null
 }
 
+/**
+ * Headline aggregates returned by the override endpoint. Same shape as the
+ * matching columns on `vat_reconciliations`; numeric BDT amounts stay as
+ * strings on the wire (parsed at render time).
+ */
+export interface AggregatesDTO {
+  total_invoices: number
+  matched_exact: number
+  matched_fuzzy: number
+  partial_match: number
+  no_match: number
+  total_vat_claimed_bdt: string
+  safe_itc_bdt: string
+  at_risk_itc_bdt: string
+}
+
 export interface ReconLineItemRow {
   id: string
   tenant_id: string

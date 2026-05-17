@@ -8,6 +8,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { api } from "@/lib/api"
+import {
+  overrideLineItem,
+  type LineItemOverrideResponse,
+} from "@/lib/reconciliation/api"
 import { supabase } from "@/lib/supabase"
 import type {
   CAOverride,
@@ -118,33 +122,55 @@ export function useCreateReconciliation() {
 
 /**
  * Override a single line item's CA decision (approved / disputed / ignore)
- * plus optional notes. Updates Supabase directly — RLS scopes by tenant.
+ * plus optional notes. Routes through FastAPI so the server can recompute
+ * the headline aggregates honoring override semantics, then returns the
+ * new aggregates so we can warm the detail cache without a refetch.
+ *
+ * Invalidates BOTH `lineItems` (so the table re-renders with the new
+ * ca_override / bucket) AND `detail` (so the hero KPI card reflects the
+ * shifted Safe / At-risk totals).
  */
 export function useOverrideLineItem() {
   const qc = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({
-      lineItemId,
-      reconciliationId,
-      ca_override,
-      ca_notes,
-    }: {
+    mutationFn: async (input: {
       lineItemId: string
       reconciliationId: string
       ca_override: CAOverride | null
       ca_notes: string | null
-    }): Promise<ReconLineItemRow> => {
-      const { data, error } = await supabase
-        .from("recon_line_items")
-        .update({ ca_override, ca_notes })
-        .eq("id", lineItemId)
-        .select()
-        .single()
-      if (error) throw error
-      // ensure recon line items list refreshes
-      void qc.invalidateQueries({ queryKey: reconKeys.lineItems(reconciliationId) })
-      return data as ReconLineItemRow
+    }): Promise<LineItemOverrideResponse> => {
+      return overrideLineItem({
+        reconciliationId: input.reconciliationId,
+        lineItemId: input.lineItemId,
+        ca_override: input.ca_override,
+        ca_notes: input.ca_notes,
+      })
+    },
+    onSuccess: (result, vars) => {
+      // Patch the detail cache in place with the recomputed aggregates so
+      // the hero card updates instantly, without waiting for a refetch.
+      qc.setQueryData<ReconciliationRow | null>(
+        reconKeys.detail(vars.reconciliationId),
+        (current) => current
+          ? {
+              ...current,
+              total_invoices: result.aggregates.total_invoices,
+              matched_exact: result.aggregates.matched_exact,
+              matched_fuzzy: result.aggregates.matched_fuzzy,
+              partial_match: result.aggregates.partial_match,
+              no_match: result.aggregates.no_match,
+              total_vat_claimed_bdt: result.aggregates.total_vat_claimed_bdt,
+              safe_itc_bdt: result.aggregates.safe_itc_bdt,
+              at_risk_itc_bdt: result.aggregates.at_risk_itc_bdt,
+            }
+          : current,
+      )
+      // Refetch line items so the row's ca_override / bucket badge is fresh.
+      void qc.invalidateQueries({ queryKey: reconKeys.lineItems(vars.reconciliationId) })
+      // Best-effort: also refetch the header in the background so any
+      // server-side derived field (e.g. updated_at) doesn't drift.
+      void qc.invalidateQueries({ queryKey: reconKeys.detail(vars.reconciliationId) })
     },
   })
 }

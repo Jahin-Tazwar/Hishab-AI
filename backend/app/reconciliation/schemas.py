@@ -115,3 +115,29 @@ class AggregatesDTO(BaseModel):
     total_vat_claimed_bdt: Decimal
     safe_itc_bdt: Decimal
     at_risk_itc_bdt: Decimal
+
+
+# ── Override endpoint ────────────────────────────────────────────────────
+
+
+class LineItemOverrideRequest(BaseModel):
+    """Body for POST /reconciliations/{id}/line-items/{line_id}/override.
+
+    `ca_override` is nullable so callers can clear a previously-set override
+    by passing `null`. `ca_notes` is independent — a CA can update notes
+    without changing the decision.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    ca_override: Optional[CAOverride] = None
+    ca_notes: Optional[str] = None
+
+
+class LineItemOverrideResponse(BaseModel):
+    """Returns the refreshed line item plus the new aggregate totals so the
+    client can update its caches with a single round-trip.
+    """
+    line_item_id: UUID
+    ca_override: Optional[CAOverride]
+    ca_notes: Optional[str]
+    aggregates: AggregatesDTO

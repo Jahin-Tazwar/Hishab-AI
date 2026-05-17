@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date
-from typing import Iterable
+from typing import Any, Iterable, Optional
 from uuid import UUID
 
 from app.database import get_supabase_admin
@@ -70,3 +70,129 @@ async def persist_reconciliation(
 
     new_id = await asyncio.to_thread(_call)
     return UUID(str(new_id))
+
+
+# ── Override / re-aggregate helpers ─────────────────────────────────────
+
+
+async def fetch_reconciliation_header(
+    reconciliation_id: UUID, *, tenant_id: UUID,
+) -> Optional[dict[str, Any]]:
+    """Return the vat_reconciliations row scoped to the caller's tenant."""
+    supabase = get_supabase_admin()
+
+    def _q() -> Optional[dict[str, Any]]:
+        res = (
+            supabase.table("vat_reconciliations")
+            .select("*")
+            .eq("id", str(reconciliation_id))
+            .eq("tenant_id", str(tenant_id))
+            .limit(1)
+            .execute()
+        )
+        return res.data[0] if res.data else None
+
+    return await asyncio.to_thread(_q)
+
+
+async def fetch_line_items(
+    reconciliation_id: UUID, *, tenant_id: UUID,
+) -> list[dict[str, Any]]:
+    """Return all line items for a reconciliation, scoped to the caller's tenant."""
+    supabase = get_supabase_admin()
+
+    def _q() -> list[dict[str, Any]]:
+        res = (
+            supabase.table("recon_line_items")
+            .select("*")
+            .eq("reconciliation_id", str(reconciliation_id))
+            .eq("tenant_id", str(tenant_id))
+            .execute()
+        )
+        return res.data or []
+
+    return await asyncio.to_thread(_q)
+
+
+async def fetch_line_item(
+    line_item_id: UUID, *, reconciliation_id: UUID, tenant_id: UUID,
+) -> Optional[dict[str, Any]]:
+    """Lookup one line item, scoped to (recon, tenant). Returns None on miss
+    so the service can surface a 404."""
+    supabase = get_supabase_admin()
+
+    def _q() -> Optional[dict[str, Any]]:
+        res = (
+            supabase.table("recon_line_items")
+            .select("*")
+            .eq("id", str(line_item_id))
+            .eq("reconciliation_id", str(reconciliation_id))
+            .eq("tenant_id", str(tenant_id))
+            .limit(1)
+            .execute()
+        )
+        return res.data[0] if res.data else None
+
+    return await asyncio.to_thread(_q)
+
+
+async def update_line_item_override(
+    line_item_id: UUID,
+    *,
+    reconciliation_id: UUID,
+    tenant_id: UUID,
+    ca_override: Optional[str],
+    ca_notes: Optional[str],
+) -> dict[str, Any]:
+    """Update a single line item's ca_override + ca_notes, returning the
+    refreshed row."""
+    supabase = get_supabase_admin()
+    payload = {"ca_override": ca_override, "ca_notes": ca_notes}
+
+    def _u() -> dict[str, Any]:
+        res = (
+            supabase.table("recon_line_items")
+            .update(payload)
+            .eq("id", str(line_item_id))
+            .eq("reconciliation_id", str(reconciliation_id))
+            .eq("tenant_id", str(tenant_id))
+            .execute()
+        )
+        # supabase-py returns the updated rows; assume exactly one matched.
+        return res.data[0] if res.data else {}
+
+    return await asyncio.to_thread(_u)
+
+
+async def update_reconciliation_aggregates(
+    reconciliation_id: UUID,
+    *,
+    tenant_id: UUID,
+    aggregates: AggregatesDTO,
+) -> None:
+    """Refresh the vat_reconciliations row's aggregate columns after an
+    override mutation. Counts (matched_exact / fuzzy / partial / no_match)
+    are preserved — overrides only shift the VAT bucket sums.
+    """
+    supabase = get_supabase_admin()
+    payload = {
+        "total_invoices": aggregates.total_invoices,
+        "matched_exact": aggregates.matched_exact,
+        "matched_fuzzy": aggregates.matched_fuzzy,
+        "partial_match": aggregates.partial_match,
+        "no_match": aggregates.no_match,
+        "total_vat_claimed_bdt": str(aggregates.total_vat_claimed_bdt),
+        "safe_itc_bdt": str(aggregates.safe_itc_bdt),
+        "at_risk_itc_bdt": str(aggregates.at_risk_itc_bdt),
+    }
+
+    def _u() -> None:
+        (
+            supabase.table("vat_reconciliations")
+            .update(payload)
+            .eq("id", str(reconciliation_id))
+            .eq("tenant_id", str(tenant_id))
+            .execute()
+        )
+
+    await asyncio.to_thread(_u)

@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 
+import { BucketBadge } from "@/components/reconciliation/BucketBadge"
 import { MatchStatusBadge } from "@/components/reconciliation/MatchStatusBadge"
 import { Button } from "@/components/ui/button"
 import {
@@ -13,6 +14,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { useOverrideLineItem } from "@/hooks/useReconciliations"
 import { formatBDT } from "@/lib/formatBDT"
+import { bucketReason, effectiveBucket } from "@/lib/reconciliation/buckets"
 import type { CAOverride, ReconLineItemRow } from "@/types/reconciliation"
 
 interface Props {
@@ -40,6 +42,21 @@ export function LineItemDrawer({ item, open, onOpenChange }: Props) {
     setNotes(item.ca_notes ?? "")
   }, [item])
 
+  // Compute live preview values. These are safe to compute every render
+  // because they're cheap; using useMemo only to communicate intent.
+  const currentBucket = useMemo(
+    () => item ? effectiveBucket(item.match_status, item.ca_override) : null,
+    [item],
+  )
+  const pendingBucket = useMemo(
+    () => item ? effectiveBucket(item.match_status, decision) : null,
+    [item, decision],
+  )
+  const pendingReason = useMemo(
+    () => item ? bucketReason(item.match_status, decision) : "",
+    [item, decision],
+  )
+
   if (!item) return null
 
   async function handleSave() {
@@ -51,7 +68,7 @@ export function LineItemDrawer({ item, open, onOpenChange }: Props) {
         ca_override: decision,
         ca_notes: notes.trim() || null,
       })
-      toast.success("Override saved")
+      toast.success("Saved. Headline totals updated.")
       onOpenChange(false)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed")
@@ -59,14 +76,21 @@ export function LineItemDrawer({ item, open, onOpenChange }: Props) {
   }
 
   const flags = item.discrepancy_flags ?? {}
+  const bucketChanged = currentBucket !== pendingBucket
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
+          <DialogTitle className="flex flex-wrap items-center gap-2">
             <span className="font-mono">{item.pr_invoice_no ?? "—"}</span>
             <MatchStatusBadge status={item.match_status} />
+            {currentBucket && (
+              <BucketBadge
+                bucket={currentBucket}
+                title={`This row currently contributes to ${currentBucket === "ignored" ? "no bucket (ignored)" : currentBucket === "safe" ? "Safe ITC" : "At-risk ITC"}.`}
+              />
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -116,14 +140,34 @@ export function LineItemDrawer({ item, open, onOpenChange }: Props) {
                   <SelectValue placeholder="None" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE}>None</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="disputed">Disputed</SelectItem>
-                  <SelectItem value="ignore">Ignore</SelectItem>
+                  <SelectItem value={NONE}>None (use match status)</SelectItem>
+                  <SelectItem value="approved">Approved — count as Safe ITC</SelectItem>
+                  <SelectItem value="disputed">Disputed — count as At-risk ITC</SelectItem>
+                  <SelectItem value="ignore">Ignore — exclude from totals</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
+
+          {/* Live preview of what will happen on save. The badge updates as
+              the user picks different override values; the arrow + "Was"
+              chip only shows when the bucket actually changes. */}
+          {pendingBucket && (
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">When saved:</span>
+                <BucketBadge bucket={pendingBucket} />
+                {bucketChanged && currentBucket && (
+                  <>
+                    <span className="text-slate-400">was</span>
+                    <BucketBadge bucket={currentBucket} variant="full" className="opacity-60" />
+                  </>
+                )}
+              </div>
+              <p className="mt-1.5 text-slate-600">{pendingReason}</p>
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <Label htmlFor="ca_notes">Notes</Label>
             <Textarea
