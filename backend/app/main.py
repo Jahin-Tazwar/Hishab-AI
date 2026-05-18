@@ -53,11 +53,14 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    """Optional ingestion boot: only when feature flag is on AND key present."""
+    """Optional ingestion + notices boot: only when feature flag is on AND key present."""
     ingestion_task: asyncio.Task | None = None
+    notices_task: asyncio.Task | None = None
     if os.environ.get("INGESTION_ENABLED", "false").lower() == "true":
         from app.ingestion.llm import GeminiLLMAdapter, set_llm_adapter
         from app.ingestion.worker import poll_pending_jobs
+        from app.notices.llm import GeminiNoticeLLMAdapter, set_notice_llm_adapter
+        from app.notices.worker import poll_pending_notices
 
         gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
         if not gemini_key:
@@ -67,17 +70,21 @@ async def _lifespan(app: FastAPI):
             )
         else:
             set_llm_adapter(GeminiLLMAdapter(api_key=gemini_key))
+            set_notice_llm_adapter(GeminiNoticeLLMAdapter(api_key=gemini_key))
             ingestion_task = asyncio.create_task(poll_pending_jobs())
+            notices_task = asyncio.create_task(poll_pending_notices())
             logger.info("ingestion.boot.started")
+            logger.info("notices.boot.started")
     try:
         yield
     finally:
-        if ingestion_task is not None:
-            ingestion_task.cancel()
-            try:
-                await ingestion_task
-            except asyncio.CancelledError:
-                pass
+        for t in (ingestion_task, notices_task):
+            if t is not None:
+                t.cancel()
+                try:
+                    await t
+                except asyncio.CancelledError:
+                    pass
 
 
 def create_app() -> FastAPI:
@@ -232,6 +239,10 @@ def create_app() -> FastAPI:
         from app.ingestion.router import router as ingestion_router
         app.include_router(ingestion_router)
         logger.info("ingestion.router_registered")
+
+        from app.notices.router import router as notices_router
+        app.include_router(notices_router)
+        logger.info("notices.router_registered")
 
     return app
 
