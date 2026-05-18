@@ -4,7 +4,7 @@ Two LLM-touching operations:
   * parse_notice — Gemini Vision call returning a ParsedNotice
   * draft_reply  — Gemini text call returning a DraftReply
 Plus an embedding call:
-  * embed_query  — text-embedding-004 over the retrieval query string
+  * embed_query  — gemini-embedding-001 (768-dim) over the retrieval query string
 
 Protocol + StubNoticeLLMAdapter mirror app/ingestion/llm.py exactly. The
 real Gemini implementation is in this file; both adapters are interchangeable
@@ -93,7 +93,11 @@ def get_notice_llm_adapter() -> NoticeLLMAdapter:
 
 
 _MODEL = "gemini-2.5-flash"
-_EMBED_MODEL = "text-embedding-004"
+# `text-embedding-004` was retired from the v1beta API in late 2025; the
+# current model is `gemini-embedding-001`, which defaults to 3072 dim. We
+# explicitly request 768 dim so the result fits our `vector(768)` column.
+_EMBED_MODEL = "gemini-embedding-001"
+_EMBED_DIM = 768
 
 
 _PARSE_PROMPT = """\
@@ -246,5 +250,8 @@ class GeminiNoticeLLMAdapter:
         res = self._client.models.embed_content(
             model=_EMBED_MODEL,
             contents=text,
+            config=self._types.EmbedContentConfig(
+                output_dimensionality=_EMBED_DIM,
+            ),
         )
         return list(res.embeddings[0].values)

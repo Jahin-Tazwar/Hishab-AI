@@ -2,11 +2,14 @@
 
 Reads every `app/notices/corpus/*.md` (skipping README.md and
 corpus_review.md), parses the YAML front-matter, computes a 768-dim
-embedding via Gemini text-embedding-004, and upserts on
+embedding via Gemini gemini-embedding-001 (explicitly truncated to 768
+dim so the vector matches the `vector(768)` column), and upserts on
 (source, source_ref, subsection, language).
 
 Idempotent: re-running updates embeddings + body if changed but doesn't
-duplicate rows.
+duplicate rows. If you change the model or dimensionality, you MUST
+re-seed — query embeddings from a different model live in a different
+vector space and ANN retrieval will return garbage.
 
 Run: cd backend && python -m scripts.seed_citation_corpus
 """
@@ -23,12 +26,17 @@ load_dotenv()
 
 CORPUS_DIR = pathlib.Path(__file__).parents[1] / "app" / "notices" / "corpus"
 _NON_CLAUSE_FILES = {"README.md", "corpus_review.md"}
+_EMBED_MODEL = "gemini-embedding-001"
+_EMBED_DIM = 768
 
 
 def _embed(client, text: str) -> list[float]:
+    from google.genai import types
+
     res = client.models.embed_content(
-        model="text-embedding-004",
+        model=_EMBED_MODEL,
         contents=text,
+        config=types.EmbedContentConfig(output_dimensionality=_EMBED_DIM),
     )
     # google-genai returns a list of Embedding objects; we always send one input
     return list(res.embeddings[0].values)

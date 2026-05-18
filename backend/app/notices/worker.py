@@ -54,7 +54,11 @@ async def process_notice(notice_id: UUID, *, tenant_id: UUID) -> None:
             await update_notice(notice_id, tenant_id=tenant_id,
                                 status=NoticeStatus.PARSING, parse_error=None)
             content = await download_original(notice["storage_path"])
-            parsed: ParsedNotice = parse_notice(
+            # parse_notice is sync (Gemini Vision call blocks for several
+            # seconds). Run it in a worker thread so other API requests stay
+            # responsive while a notice parses.
+            parsed: ParsedNotice = await asyncio.to_thread(
+                parse_notice,
                 content, mime=notice["mime_type"], adapter=adapter,
                 filename=notice["original_filename"],
             )

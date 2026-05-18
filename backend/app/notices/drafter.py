@@ -6,6 +6,7 @@ resulting HTML, and returns the persisted-ready shape.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import re
 from typing import Any
@@ -203,5 +204,9 @@ async def draft(
     """Run the LLM call and return the finalized draft shape."""
     prompt = build_draft_prompt(parsed, summary, citations)
     lookup_key = lookup_key_override or hashlib.sha256(prompt.encode()).hexdigest()[:16]
-    raw = adapter.draft_reply(prompt=prompt, lookup_key=lookup_key)
+    # adapter.draft_reply is sync (Gemini call); off-thread to keep the
+    # event loop responsive during the multi-second LLM round-trip.
+    raw = await asyncio.to_thread(
+        adapter.draft_reply, prompt=prompt, lookup_key=lookup_key,
+    )
     return finalize_draft_output(raw, retrieved_chunks=citations)

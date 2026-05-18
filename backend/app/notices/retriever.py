@@ -6,6 +6,7 @@ citation_corpus_chunks pre-filtered by topic_tags.
 """
 from __future__ import annotations
 
+import asyncio
 from typing import List
 
 from app.notices.llm import NoticeLLMAdapter
@@ -58,7 +59,8 @@ async def retrieve(
     topic_tags: list[str] | None = None,
 ) -> List[CitationChunk]:
     query = build_query_text(parsed, summary)
-    embedding = adapter.embed_query(query)
+    # embed_query is sync; off-thread it so we don't block the event loop.
+    embedding = await asyncio.to_thread(adapter.embed_query, query)
     chunks = await retrieve_citation_chunks(
         embedding=embedding,
         topic_tags=topic_tags or _TOPIC_TAGS,
