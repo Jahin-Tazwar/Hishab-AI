@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useFinalize } from "@/hooks/useIngestion"
+import { notifyNoticeOfReconciliation } from "@/lib/notices/wizardCallback"
 import type { JobOut } from "@/types/ingestion"
 
 interface Props {
@@ -25,10 +26,24 @@ export function FinalizeStep({ job, clientId, finalizeJobId }: Props) {
   // Auto-navigate when reconciliation completes
   useEffect(() => {
     if (job.status === "completed" && job.reconciliation_id) {
-      toast.success("Reconciliation complete")
-      navigate(`/clients/${clientId}/recon/${job.reconciliation_id}`, { replace: true })
+      const reconciliationId = job.reconciliation_id
+      void (async () => {
+        const noticeId = await notifyNoticeOfReconciliation({
+          clientId,
+          periodStart: job.period_start,
+          periodEnd: job.period_end,
+          reconciliationId,
+        })
+        if (noticeId) {
+          toast.success("Reconciliation done — your reply draft is ready.")
+          navigate(`/clients/${clientId}/notices/${noticeId}`, { replace: true })
+          return
+        }
+        toast.success("Reconciliation complete")
+        navigate(`/clients/${clientId}/recon/${reconciliationId}`, { replace: true })
+      })()
     }
-  }, [job.status, job.reconciliation_id, clientId, navigate])
+  }, [job.status, job.reconciliation_id, job.period_start, job.period_end, clientId, navigate])
 
   async function handleFinalize() {
     try {

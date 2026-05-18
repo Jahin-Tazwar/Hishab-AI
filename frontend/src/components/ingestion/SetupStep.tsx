@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useStartSession } from "@/hooks/useIngestion"
 import { usePriorDocs } from "@/hooks/usePriorDocs"
 import { ApiError } from "@/lib/api"
+import { notifyNoticeOfReconciliation } from "@/lib/notices/wizardCallback"
 
 interface Props {
   clientId: string
@@ -40,6 +41,17 @@ export function SetupStep({ clientId }: Props) {
         reuse_sf_doc_id: reuseSf && priorSf ? priorSf.id : undefined,
       })
       if (res.reconciliation_id) {
+        const noticeId = await notifyNoticeOfReconciliation({
+          clientId,
+          periodStart: period.start,
+          periodEnd: period.end,
+          reconciliationId: res.reconciliation_id,
+        })
+        if (noticeId) {
+          toast.success("Reconciliation done — your reply draft is ready.")
+          navigate(`/clients/${clientId}/notices/${noticeId}`, { replace: true })
+          return
+        }
         toast.success("Reconciliation complete")
         navigate(`/clients/${clientId}/recon/${res.reconciliation_id}`, { replace: true })
         return
