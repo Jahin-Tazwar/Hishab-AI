@@ -222,6 +222,10 @@ class CitationOut(BaseModel):
 
 
 class NoticeDraftOut(BaseModel):
+    # `model_version` starts with `model_` which Pydantic 2 reserves for its
+    # own attributes; opt out of the protected-namespace warning.
+    model_config = ConfigDict(protected_namespaces=())
+
     id: UUID
     notice_id: UUID
     language: str
