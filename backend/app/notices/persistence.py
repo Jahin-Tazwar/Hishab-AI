@@ -57,3 +57,39 @@ async def find_recon_by_period(
 
     res = await asyncio.to_thread(_q)
     return UUID(res.data[0]["id"]) if res.data else None
+
+
+# ── Citation corpus ANN ───────────────────────────────────────────────────
+
+
+async def retrieve_citation_chunks(
+    *, embedding: list[float], topic_tags: list[str], k: int,
+) -> list[dict]:
+    """ANN over citation_corpus_chunks, pre-filtered by topic_tags overlap.
+
+    Returns at most 2*k DB rows (both languages × k groups). Caller dedupes
+    by (source, source_ref, subsection) if needed.
+    """
+    from app.notices.schemas import CitationChunk
+
+    sb = get_supabase_admin()
+    def _rpc():
+        return sb.rpc(
+            "match_citation_chunks",
+            {
+                "query_embedding": embedding,
+                "match_topic_tags": topic_tags,
+                "match_k": k,
+            },
+        ).execute()
+
+    res = await asyncio.to_thread(_rpc)
+    rows = res.data or []
+    return [
+        CitationChunk(
+            id=r["id"], source=r["source"], source_ref=r["source_ref"],
+            subsection=r.get("subsection"), language=r["language"],
+            title=r["title"], body=r["body"],
+        )
+        for r in rows
+    ]
