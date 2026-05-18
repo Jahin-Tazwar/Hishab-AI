@@ -18,6 +18,9 @@ import { IngestionJob } from "@/pages/IngestionJob"
 import { IngestionNew } from "@/pages/IngestionNew"
 import { Login } from "@/pages/Login"
 import { NotFound } from "@/pages/NotFound"
+import { NoticeDetail } from "@/pages/NoticeDetail"
+import { NoticeDraft } from "@/pages/NoticeDraft"
+import { NoticeList } from "@/pages/NoticeList"
 import { Onboard } from "@/pages/Onboard"
 import { ReconReport } from "@/pages/ReconReport"
 import { Signup } from "@/pages/Signup"
@@ -80,6 +83,20 @@ export const router = createBrowserRouter([
   {
     path: "/clients/:id/recon/:reconId",
     element: <RootLayout><ProtectedRoute><ReconReport /></ProtectedRoute></RootLayout>,
+  },
+
+  // NBR notices
+  {
+    path: "/clients/:id/notices",
+    element: <RootLayout><ProtectedRoute><NoticeList /></ProtectedRoute></RootLayout>,
+  },
+  {
+    path: "/clients/:id/notices/:noticeId",
+    element: <RootLayout><ProtectedRoute><NoticeDetail /></ProtectedRoute></RootLayout>,
+  },
+  {
+    path: "/clients/:id/notices/:noticeId/draft",
+    element: <RootLayout><ProtectedRoute><NoticeDraft /></ProtectedRoute></RootLayout>,
   },
 
   { path: "*", element: <RootLayout><NotFound /></RootLayout> },

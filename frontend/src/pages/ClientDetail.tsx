@@ -112,6 +112,22 @@ export function ClientDetail() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader><CardTitle>NBR notices</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Upload NBR notices to extract demand details, link to reconciliations,
+            and draft AI-assisted responses with legal citations.
+          </p>
+          <Link
+            to={`/clients/${client.id}/notices`}
+            className={buttonVariants()}
+          >
+            View notices
+          </Link>
+        </CardContent>
+      </Card>
+
       <EditClientDialog client={client} open={editing} onOpenChange={setEditing} />
       <DeleteClientDialog
         client={client}
