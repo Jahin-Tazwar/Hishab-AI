@@ -12,14 +12,18 @@ vi.mock("@/lib/api", () => ({
 }))
 
 describe("notices api", () => {
-  it("uploadNotice posts multipart with client_id", async () => {
+  it("uploadNotice posts multipart with client_id and clears JSON header", async () => {
     ;(api.post as any).mockResolvedValueOnce({ data: { notice_id: "n1" } })
     const file = new File([new Uint8Array(10)], "x.pdf", { type: "application/pdf" })
     const out = await noticesApi.uploadNotice("c1", file)
     expect(out.notice_id).toBe("n1")
-    const [path, body] = (api.post as any).mock.calls[0]
+    const [path, body, config] = (api.post as any).mock.calls[0]
     expect(path).toMatch(/\/notices\/?\?client_id=c1$/)
     expect(body).toBeInstanceOf(FormData)
+    // Critical: Content-Type MUST be cleared so axios computes the multipart
+    // boundary from the FormData payload. Otherwise the instance default
+    // (application/json) wins and FastAPI returns 422.
+    expect(config?.headers?.["Content-Type"]).toBeUndefined()
   })
 
   it("relink posts JSON body with period and optional recon id", async () => {

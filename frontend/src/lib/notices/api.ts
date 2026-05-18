@@ -12,8 +12,14 @@ export async function uploadNotice(
 ): Promise<UploadNoticeResponse> {
   const fd = new FormData()
   fd.append("file", file)
+  // The axios instance defaults Content-Type to application/json; for
+  // multipart we MUST clear it so axios computes the boundary header from
+  // the FormData payload. Without this, the body is sent labelled JSON and
+  // FastAPI returns 422 "missing field `file`".
   const { data } = await api.post<UploadNoticeResponse>(
-    `${BASE}/?client_id=${encodeURIComponent(clientId)}`, fd,
+    `${BASE}/?client_id=${encodeURIComponent(clientId)}`,
+    fd,
+    { headers: { "Content-Type": undefined as unknown as string } },
   )
   return data
 }
