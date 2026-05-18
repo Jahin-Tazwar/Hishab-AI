@@ -158,3 +158,14 @@ liveness probe.
 See [`docs/superpowers/specs/`](docs/superpowers/specs/) for design specs
 and [`docs/superpowers/plans/`](docs/superpowers/plans/) for the
 phase-by-phase implementation plans (A–E).
+
+### Notices PDF export
+The notice-drafter exports replies as `.docx` (always) and `.pdf` (when
+LibreOffice is installed). The PDF path shells out to `soffice --headless`.
+
+- macOS: `brew install --cask libreoffice`
+- Ubuntu (Render image): `apt-get install -y libreoffice-core libreoffice-writer fonts-noto fonts-noto-bengali`
+- Windows: install LibreOffice from libreoffice.org and ensure `soffice.exe` is on PATH
+
+Without LibreOffice, the API returns 503 on `?format=pdf` with the
+message "PDF rendering unavailable on this server"; `.docx` still works.
