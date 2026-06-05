@@ -211,7 +211,8 @@ class WorkingPaperOut(BaseModel):
 
 class ComposeWorkingPaperRequest(BaseModel):
     kind: WorkingPaperKind
-    reconciliation_id: UUID  # required for at_risk_itc_schedule
+    reconciliation_id: Optional[UUID] = None  # required for at_risk_itc_schedule
+    notice_id: Optional[UUID] = None           # required for audit_defense_pack
 
 
 class UpdateNotesRequest(BaseModel):

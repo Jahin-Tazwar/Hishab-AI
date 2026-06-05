@@ -34,6 +34,7 @@ async def compose_working_paper(
     wp_id = await svc.compose_working_paper(
         tenant_id=tenant_id, user_id=user_id,
         kind=body.kind, reconciliation_id=body.reconciliation_id,
+        notice_id=body.notice_id,
     )
     return {"working_paper_id": str(wp_id)}
 

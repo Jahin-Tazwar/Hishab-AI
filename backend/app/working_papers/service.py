@@ -25,6 +25,7 @@ from app.working_papers.rendering import (
 )
 from app.working_papers.schemas import (
     AtRiskItcSchedulePayload,
+    AuditDefensePackPayload,
     WorkingPaperEditSource,
     WorkingPaperKind,
     WorkingPaperStatus,
@@ -35,6 +36,7 @@ log = structlog.get_logger()
 
 _PAYLOAD_VALIDATORS = {
     WorkingPaperKind.AT_RISK_ITC_SCHEDULE: AtRiskItcSchedulePayload,
+    WorkingPaperKind.AUDIT_DEFENSE_PACK: AuditDefensePackPayload,
 }
 
 
@@ -104,6 +106,7 @@ async def compose_working_paper(
     user_id: UUID,
     kind: WorkingPaperKind,
     reconciliation_id: Optional[UUID] = None,
+    notice_id: Optional[UUID] = None,
 ) -> UUID:
     """Run the recipe, validate, persist. Returns the new working_paper_id."""
     # Recipe IDs match enum values 1:1.
@@ -116,6 +119,11 @@ async def compose_working_paper(
                 "reconciliation_id is required for at_risk_itc_schedule",
             )
         inputs: Dict[str, Any] = {"reconciliation_id": reconciliation_id}
+    elif kind == WorkingPaperKind.AUDIT_DEFENSE_PACK:
+        if notice_id is None:
+            raise WorkingPaperInvalidStateError(
+                "notice_id is required for audit_defense_pack")
+        inputs = {"notice_id": notice_id}
     else:
         inputs = {}
 
@@ -145,6 +153,7 @@ async def compose_working_paper(
         client_id=UUID(str(validated.client_id)),
         kind=kind,
         reconciliation_id=getattr(validated, "reconciliation_id", None),
+        notice_id=getattr(validated, "notice_id", None),
         period_start=getattr(validated, "period_start", None),
         period_end=getattr(validated, "period_end", None),
         recipe_version=recipe.version,

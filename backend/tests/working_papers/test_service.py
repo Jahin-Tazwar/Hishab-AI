@@ -148,3 +148,52 @@ def test_get_not_stale_when_recon_missing(monkeypatch):
     monkeypatch.setattr(svc.p, "get_working_paper", _get)
     wp = _run(svc.get_working_paper(wp_id=WP_ID, tenant_id=TENANT))
     assert wp["is_stale"] is False
+
+
+# ── Audit Defense Pack compose ────────────────────────────────────────────
+
+
+def test_compose_audit_defense_pack_requires_notice_id(monkeypatch):
+    from app.working_papers.schemas import WorkingPaperKind
+    from app.working_papers.exceptions import WorkingPaperInvalidStateError
+
+    with pytest.raises(WorkingPaperInvalidStateError):
+        _run(svc.compose_working_paper(
+            tenant_id=TENANT, user_id=PREPARER,
+            kind=WorkingPaperKind.AUDIT_DEFENSE_PACK, notice_id=None,
+        ))
+
+
+def test_compose_audit_defense_pack_persists_notice_id(monkeypatch):
+    from app.working_papers.schemas import WorkingPaperKind
+    from uuid import uuid4
+    captured = {}
+    notice_id = uuid4()
+
+    class _Recipe:
+        id = "audit_defense_pack"
+        version = "v1"
+        async def compose(self, *, tenant_id, **inputs):
+            captured["inputs"] = inputs
+            return {
+                "kind": "audit_defense_pack", "recipe_version": "v1",
+                "client_id": str(uuid4()), "client_name": "X",
+                "notice_id": str(notice_id),
+                "notice": {}, "reconciliation_id": None,
+                "reconciled_position": None, "override_log": [],
+                "drafted_reply": None, "evidence_index": [],
+            }
+
+    async def _create(**kw):
+        captured["create"] = kw
+        return uuid4()
+
+    monkeypatch.setattr(svc, "get_recipe", lambda rid: _Recipe())
+    monkeypatch.setattr(svc.p, "create_working_paper", _create)
+
+    _run(svc.compose_working_paper(
+        tenant_id=TENANT, user_id=PREPARER,
+        kind=WorkingPaperKind.AUDIT_DEFENSE_PACK, notice_id=notice_id,
+    ))
+    assert captured["inputs"] == {"notice_id": notice_id}
+    assert captured["create"]["notice_id"] == notice_id
