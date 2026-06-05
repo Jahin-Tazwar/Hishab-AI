@@ -185,8 +185,9 @@ function SupplierGroupCard({ group }: { group: AtRiskSupplierGroup }) {
                 <TableRow>
                   <TableHead>Invoice</TableHead>
                   <TableHead>Date</TableHead>
-                  <TableHead className="text-right">Taxable</TableHead>
-                  <TableHead className="text-right">VAT</TableHead>
+                  <TableHead className="text-right">Claimed VAT</TableHead>
+                  <TableHead className="text-right">Supplier VAT</TableHead>
+                  <TableHead className="text-right">Variance</TableHead>
                   <TableHead>Match</TableHead>
                   <TableHead>Recommended</TableHead>
                 </TableRow>
@@ -199,15 +200,29 @@ function SupplierGroupCard({ group }: { group: AtRiskSupplierGroup }) {
                     </TableCell>
                     <TableCell>{line.invoice_date ?? "—"}</TableCell>
                     <TableCell className="text-right font-mono">
-                      {formatBDT(line.taxable_amount_bdt ?? null)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
                       {formatBDT(line.vat_amount_bdt ?? null)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-slate-500">
+                      {line.sf_vat_amount_bdt
+                        ? formatBDT(line.sf_vat_amount_bdt)
+                        : "not filed"}
+                    </TableCell>
+                    <TableCell className="text-right font-mono font-semibold text-amber-700">
+                      {formatBDT(line.vat_variance_bdt ?? null)}
                     </TableCell>
                     <TableCell>
                       <Badge variant={MATCH_BADGE_VARIANT[line.match_status]}>
                         {WP_MATCH_STATUS_LABELS[line.match_status]}
                       </Badge>
+                      {line.discrepancy_reason ? (
+                        <p className="mt-1 text-xs text-slate-400">
+                          {line.discrepancy_reason}
+                          {typeof line.date_off_by_days === "number" &&
+                          line.date_off_by_days !== 0
+                            ? ` · ${line.date_off_by_days}d off`
+                            : ""}
+                        </p>
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       <Badge variant={ACTION_BADGE_VARIANT[line.recommended_action]}>

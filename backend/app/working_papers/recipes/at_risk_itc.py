@@ -1,8 +1,12 @@
 """At-Risk ITC Schedule recipe — composes the client-facing deliverable
 from a reconciliation_id.
 
-Pulls the recon header + lines via persistence helpers. Groups by supplier.
-Computes per-supplier totals. Tags each line with a recommended action.
+Pulls the recon header + lines via persistence helpers. Filters to the
+lines that are genuinely at-risk using the SAME arbiter the headline KPI
+uses (`reconciliation.buckets.effective_bucket`), so the sum of per-supplier
+at-risk VAT always ties to `vat_reconciliations.at_risk_itc_bdt`. Groups by
+supplier, carries the supplier-side figures + variance for each line, and
+tags each line with a recommended action.
 """
 from __future__ import annotations
 
@@ -12,6 +16,12 @@ from typing import Any
 from uuid import UUID
 
 from app.database import get_supabase_admin
+from app.reconciliation.buckets import effective_bucket
+
+
+# PostgREST caps an unpaginated response at 1000 rows; we page explicitly so
+# a large purchase register never silently truncates the schedule.
+_PAGE = 1000
 
 
 class AtRiskItcScheduleRecipe:
@@ -47,30 +57,43 @@ class AtRiskItcScheduleRecipe:
                 .execute()
             )
 
-        def _q_lines():
+        def _q_lines(offset: int, limit: int):
             return (
                 sb.table("recon_line_items")
                 .select(
                     "id, pr_invoice_no, pr_supplier_bin, pr_supplier_name, "
                     "pr_invoice_date, pr_taxable_amount_bdt, pr_vat_amount_bdt, "
-                    "match_status, match_score, ca_override, ca_notes"
+                    "sf_invoice_no, sf_invoice_date, sf_taxable_amount_bdt, "
+                    "sf_vat_amount_bdt, match_status, match_score, "
+                    "discrepancy_flags, ca_override, ca_notes"
                 )
                 .eq("tenant_id", str(tenant_id))
                 .eq("reconciliation_id", str(reconciliation_id))
                 .order("pr_supplier_name")
                 .order("pr_invoice_date")
+                .range(offset, offset + limit - 1)
                 .execute()
             )
 
         recon = (await asyncio.to_thread(_q_recon)).data
         client = (await asyncio.to_thread(_q_client, recon["client_id"])).data
-        rows = (await asyncio.to_thread(_q_lines)).data or []
 
-        # Filter to at-risk lines: anything not exact, OR exact but the CA disputed/ignored.
-        # `exact` matches with no CA override = safe; everything else lands here.
+        # Page through ALL line items — never rely on the default row cap.
+        rows: list[dict] = []
+        while True:
+            batch = (await asyncio.to_thread(_q_lines, len(rows), _PAGE)).data or []
+            rows.extend(batch)
+            if len(batch) < _PAGE:
+                break
+
+        # Filter to at-risk lines using the single source of truth shared with
+        # the recon engine's headline KPI. effective_bucket maps:
+        #   exact/fuzzy -> safe, approved -> safe, ignore -> excluded,
+        #   partial/no_match -> at_risk, disputed -> at_risk.
+        # Result: Σ per-supplier at-risk VAT == recon.at_risk_itc_bdt exactly.
         at_risk_rows = [
             r for r in rows
-            if r["match_status"] != "exact" or r.get("ca_override") in ("disputed", "ignore")
+            if effective_bucket(r["match_status"], r.get("ca_override")) == "at_risk"
         ]
 
         # Group by (supplier_bin, supplier_name)
@@ -79,29 +102,17 @@ class AtRiskItcScheduleRecipe:
             key = (r.get("pr_supplier_bin"), r.get("pr_supplier_name"))
             groups.setdefault(key, []).append(r)
 
-        def _action(row: dict) -> str:
-            if row.get("ca_override") == "approved":
-                return "approved_by_ca"
-            if row.get("ca_override") == "ignore":
-                return "no_action"
-            if row.get("ca_override") == "disputed":
-                return "partner_review"
-            ms = row["match_status"]
-            if ms == "no_match":
-                return "chase_supplier"
-            if ms == "partial":
-                return "partner_review"
-            if ms == "fuzzy":
-                return "partner_review"
-            return "no_action"
-
         supplier_groups: list[dict[str, Any]] = []
         for (bin_, name), grp in groups.items():
             lines_payload: list[dict[str, Any]] = []
             grp_total = Decimal("0.00")
             for r in grp:
+                # Every row here is at_risk by construction, so its full claimed
+                # VAT contributes to the at-risk total (ties to the headline).
                 vat = Decimal(str(r.get("pr_vat_amount_bdt") or "0"))
                 grp_total += vat
+                sf_vat = r.get("sf_vat_amount_bdt")
+                flags = r.get("discrepancy_flags") or {}
                 lines_payload.append({
                     "line_id": r["id"],
                     "supplier_name": r.get("pr_supplier_name"),
@@ -110,6 +121,14 @@ class AtRiskItcScheduleRecipe:
                     "invoice_date": r.get("pr_invoice_date"),
                     "taxable_amount_bdt": r.get("pr_taxable_amount_bdt"),
                     "vat_amount_bdt": r.get("pr_vat_amount_bdt"),
+                    # Supplier-reported figures + the gap — this comparison IS
+                    # the at-risk analysis. None sf_vat (no_match) => full claim
+                    # is the exposure.
+                    "sf_taxable_amount_bdt": r.get("sf_taxable_amount_bdt") or None,
+                    "sf_vat_amount_bdt": sf_vat or None,
+                    "vat_variance_bdt": str(vat - Decimal(str(sf_vat or "0"))),
+                    "discrepancy_reason": flags.get("reason"),
+                    "date_off_by_days": flags.get("date_off_by_days"),
                     "match_status": r["match_status"],
                     "match_score": r.get("match_score"),
                     "ca_override": r.get("ca_override"),
@@ -151,3 +170,32 @@ class AtRiskItcScheduleRecipe:
             "summary": summary,
             "supplier_groups": supplier_groups,
         }
+
+
+def _action(row: dict) -> str:
+    """Map a line to a recommended CA action.
+
+    NOTE: taxonomy pending a short validation with a practicing CA before the
+    client-facing labels are locked. Current mapping keeps every enum value
+    reachable and ties the advice to the evidence:
+      approved -> approved_by_ca   (defensive; approved lines are safe and are
+                                    filtered out before this is reached)
+      ignore   -> no_action        (defensive; ignored lines are excluded)
+      disputed -> reverse_claim    (CA reviewed and rejected -> reverse the ITC)
+      no_match -> chase_supplier   (supplier never filed -> ask them to file)
+      partial  -> partner_review   (amounts differ materially -> judgment call)
+      fuzzy    -> partner_review   (defensive; fuzzy is safe and filtered out)
+    """
+    ov = row.get("ca_override")
+    if ov == "approved":
+        return "approved_by_ca"
+    if ov == "ignore":
+        return "no_action"
+    if ov == "disputed":
+        return "reverse_claim"
+    ms = row["match_status"]
+    if ms == "no_match":
+        return "chase_supplier"
+    if ms == "partial":
+        return "partner_review"
+    return "partner_review"

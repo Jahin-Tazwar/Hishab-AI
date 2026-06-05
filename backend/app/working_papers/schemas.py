@@ -45,6 +45,14 @@ class AtRiskLine(BaseModel):
     invoice_date: Optional[date] = None
     taxable_amount_bdt: Optional[Decimal] = None
     vat_amount_bdt: Optional[Decimal] = None
+    # Supplier-reported figures + the variance (claim − supplier). For a
+    # no_match line the supplier figures are null and the full claimed VAT is
+    # the exposure.
+    sf_taxable_amount_bdt: Optional[Decimal] = None
+    sf_vat_amount_bdt: Optional[Decimal] = None
+    vat_variance_bdt: Optional[Decimal] = None
+    discrepancy_reason: Optional[str] = None
+    date_off_by_days: Optional[int] = None
     match_status: Literal["exact", "fuzzy", "partial", "no_match"]
     match_score: Optional[Decimal] = None
     ca_override: Optional[Literal["approved", "disputed", "ignore"]] = None
@@ -55,7 +63,9 @@ class AtRiskLine(BaseModel):
     ]
 
     @field_serializer(
-        "taxable_amount_bdt", "vat_amount_bdt", "match_score",
+        "taxable_amount_bdt", "vat_amount_bdt",
+        "sf_taxable_amount_bdt", "sf_vat_amount_bdt", "vat_variance_bdt",
+        "match_score",
         when_used="json",
     )
     def _money(self, v: Optional[Decimal]) -> Optional[str]:

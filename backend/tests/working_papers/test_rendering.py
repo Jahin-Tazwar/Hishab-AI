@@ -46,6 +46,11 @@ def _payload() -> dict:
                         "invoice_date": "2026-04-05",
                         "taxable_amount_bdt": "5000.00",
                         "vat_amount_bdt": "750.00",
+                        "sf_taxable_amount_bdt": None,
+                        "sf_vat_amount_bdt": None,
+                        "vat_variance_bdt": "750.00",
+                        "discrepancy_reason": None,
+                        "date_off_by_days": None,
                         "match_status": "no_match",
                         "match_score": None,
                         "ca_override": None,
@@ -68,11 +73,16 @@ def _payload() -> dict:
                         "invoice_date": "2026-04-10",
                         "taxable_amount_bdt": "3000.00",
                         "vat_amount_bdt": "450.00",
+                        "sf_taxable_amount_bdt": "2700.00",
+                        "sf_vat_amount_bdt": "405.00",
+                        "vat_variance_bdt": "45.00",
+                        "discrepancy_reason": "vat amount differs",
+                        "date_off_by_days": 0,
                         "match_status": "partial",
                         "match_score": "0.72",
                         "ca_override": "disputed",
                         "ca_notes": "Pending VAT cert",
-                        "recommended_action": "partner_review",
+                        "recommended_action": "reverse_claim",
                     },
                 ],
                 "total_vat_at_risk_bdt": "450.00",
@@ -104,6 +114,18 @@ def test_render_docx_contains_client_summary_and_supplier_groups():
     assert "Total VAT claimed (BDT)" in summary_text
     assert "50000.00" in summary_text
     assert "10000.00" in summary_text
+
+    # F3: supplier-side comparison must reach the export. The per-supplier
+    # tables carry Claimed/Supplier/Variance VAT columns; a no_match line
+    # shows "not filed" for the supplier figure.
+    body_text = "\n".join(
+        cell.text for t in doc.tables for row in t.rows for cell in row.cells
+    )
+    assert "Claimed VAT (BDT)" in body_text
+    assert "Supplier VAT (BDT)" in body_text
+    assert "Variance (BDT)" in body_text
+    assert "not filed" in body_text         # Alpha's no_match line
+    assert "405.00" in body_text            # Bravo's supplier-reported VAT
 
 
 def test_render_docx_includes_ca_commentary_when_notes_provided():

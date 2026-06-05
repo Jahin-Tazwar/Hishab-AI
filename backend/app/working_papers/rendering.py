@@ -86,25 +86,28 @@ def _render_at_risk_itc_schedule(payload: dict, notes_html: str, tenant: dict) -
         )
         gr.bold = True
 
-        table = doc.add_table(rows=1 + len(grp["lines"]), cols=6)
+        table = doc.add_table(rows=1 + len(grp["lines"]), cols=7)
         table.style = "Light List"
         hdr = table.rows[0].cells
         hdr[0].text = "Invoice no"
         hdr[1].text = "Invoice date"
-        hdr[2].text = "Taxable (BDT)"
-        hdr[3].text = "VAT (BDT)"
-        hdr[4].text = "Match"
-        hdr[5].text = "Recommended action"
+        hdr[2].text = "Claimed VAT (BDT)"
+        hdr[3].text = "Supplier VAT (BDT)"
+        hdr[4].text = "Variance (BDT)"
+        hdr[5].text = "Match"
+        hdr[6].text = "Recommended action"
         for i, line in enumerate(grp["lines"], start=1):
             row = table.rows[i].cells
             row[0].text = str(line.get("invoice_no") or "")
             row[1].text = str(line.get("invoice_date") or "")
-            row[2].text = str(line.get("taxable_amount_bdt") or "")
-            row[3].text = str(line.get("vat_amount_bdt") or "")
+            row[2].text = str(line.get("vat_amount_bdt") or "")
+            sf_vat = line.get("sf_vat_amount_bdt")
+            row[3].text = str(sf_vat) if sf_vat else "not filed"
+            row[4].text = str(line.get("vat_variance_bdt") or "")
             override = line.get("ca_override")
             ms = line["match_status"]
-            row[4].text = ms if not override else f"{ms} ({override})"
-            row[5].text = (line["recommended_action"] or "").replace("_", " ")
+            row[5].text = ms if not override else f"{ms} ({override})"
+            row[6].text = (line["recommended_action"] or "").replace("_", " ")
 
     # CA commentary (notes_html is bleached/sanitized at edit time; we strip
     # tags here for plain-text docx insertion to keep this simple — a future
