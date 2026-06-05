@@ -121,6 +121,8 @@ def render_docx(
     kind = payload.get("kind")
     if kind == "at_risk_itc_schedule":
         return _render_at_risk_itc_schedule(payload, notes_html, tenant, meta or {})
+    if kind == "audit_defense_pack":
+        return _render_audit_defense_pack(payload, notes_html, tenant, meta or {})
     raise ValueError(f"Unknown working paper kind: {kind!r}")
 
 
@@ -280,6 +282,146 @@ def _render_at_risk_itc_schedule(
 
     buf = io.BytesIO()
     doc.save(buf)
+    return buf.getvalue()
+
+
+def _render_audit_defense_pack(payload, notes_html, tenant, meta) -> bytes:
+    doc = Document()
+
+    # Letterhead (same as at-risk)
+    firm = tenant.get("firm_name") or "Chartered Accountants"
+    p = doc.add_paragraph(); r = p.add_run(firm); r.bold = True; r.font.size = Pt(14)
+    contact_bits = [tenant.get("address"),
+                    f"ICAB Reg: {tenant['icab_reg_no']}" if tenant.get("icab_reg_no") else None,
+                    tenant.get("email"), tenant.get("phone")]
+    contact = "  ·  ".join(b for b in contact_bits if b)
+    if contact:
+        cp = doc.add_paragraph(contact); cp.runs[0].font.size = Pt(9)
+
+    ref_line = []
+    if meta.get("reference"): ref_line.append(f"Ref: {meta['reference']}")
+    if meta.get("generated_on"): ref_line.append(f"Generated: {meta['generated_on']}")
+    if meta.get("status"): ref_line.append(f"Status: {str(meta['status']).upper()}")
+    if ref_line:
+        rp = doc.add_paragraph("   ·   ".join(ref_line))
+        rp.runs[0].font.size = Pt(9); rp.runs[0].italic = True
+
+    # Title + cover facts
+    doc.add_paragraph("")
+    t = doc.add_paragraph(); tr = t.add_run("Audit Defense Pack")
+    tr.bold = True; tr.font.size = Pt(16)
+    n = payload["notice"]
+    doc.add_paragraph().add_run(
+        f"Client: {payload['client_name']}"
+        + (f" (BIN {payload['client_bin']})" if payload.get("client_bin") else "")
+        + (f", TIN {payload['client_tin']}" if payload.get("client_tin") else ""))
+    doc.add_paragraph().add_run(
+        f"In response to Notice {n.get('notice_no') or '(unknown)'} "
+        f"dated {n.get('notice_date') or '(unknown)'}")
+    demand = doc.add_paragraph()
+    dr = demand.add_run(f"Alleged shortfall: BDT {_fmt_bdt(n.get('alleged_shortfall_bdt'))}")
+    dr.bold = True; dr.font.size = Pt(12)
+
+    # 1. Notice summary
+    doc.add_paragraph("")
+    doc.add_paragraph().add_run("1. Notice summary").bold = True
+    nt = doc.add_table(rows=5, cols=2); nt.style = "Light List"
+    nrows = [
+        ("Notice type", str(n.get("notice_type") or "")),
+        ("Period", f"{n.get('period_start') or '?'} to {n.get('period_end') or '?'}"),
+        ("Alleged ITC claimed (BDT)", _fmt_bdt(n.get("alleged_itc_claimed_bdt"))),
+        ("Alleged ITC allowed (BDT)", _fmt_bdt(n.get("alleged_itc_allowed_bdt"))),
+        ("Alleged shortfall (BDT)", _fmt_bdt(n.get("alleged_shortfall_bdt"))),
+    ]
+    for i, (k, v) in enumerate(nrows):
+        nt.rows[i].cells[0].text = k; nt.rows[i].cells[1].text = v
+        _right(nt.rows[i].cells[1])
+
+    # 2. Reconciled position (reused emitters)
+    doc.add_paragraph("")
+    doc.add_paragraph().add_run("2. Reconciled position").bold = True
+    rp_section = payload.get("reconciled_position")
+    if rp_section:
+        _emit_summary_table(doc, rp_section["summary"])
+        doc.add_paragraph().add_run("At-risk lines by supplier").bold = True
+        grand = _emit_supplier_section(doc, rp_section["supplier_groups"])
+        gt = doc.add_paragraph()
+        gtr = gt.add_run(f"Total at-risk ITC: BDT {_fmt_bdt(grand)}")
+        gtr.bold = True; gtr.font.size = Pt(12)
+    else:
+        doc.add_paragraph("No reconciliation is linked to this notice.")
+
+    # 3. Decision & override log
+    doc.add_paragraph("")
+    doc.add_paragraph().add_run("3. Decision & override log").bold = True
+    log = payload.get("override_log") or []
+    if log:
+        lt = doc.add_table(rows=1 + len(log), cols=4); lt.style = "Light List"
+        for c, h in enumerate(["Supplier", "Invoice", "Decision", "Note"]):
+            lt.rows[0].cells[c].text = h
+        for i, e in enumerate(log, start=1):
+            cells = lt.rows[i].cells
+            cells[0].text = str(e.get("supplier_name") or "")
+            cells[1].text = str(e.get("invoice_no") or "")
+            cells[2].text = str(e.get("ca_override") or "")
+            cells[3].text = str(e.get("ca_notes") or "")
+    else:
+        doc.add_paragraph("No CA overrides were recorded for this period.")
+
+    # 4. Drafted reply + citations
+    doc.add_paragraph("")
+    doc.add_paragraph().add_run("4. Drafted reply").bold = True
+    reply = payload.get("drafted_reply")
+    if reply and (reply.get("body_html") or "").strip():
+        for block in _notes_blocks(reply["body_html"]):
+            doc.add_paragraph(block)
+        cits = reply.get("citations") or []
+        if cits:
+            doc.add_paragraph().add_run("Citations").bold = True
+            for c in cits:
+                ref = c.get("source_ref") or c.get("source") or "citation"
+                snip = c.get("snippet")
+                doc.add_paragraph(f"• {ref}" + (f" — {snip}" if snip else ""))
+    else:
+        doc.add_paragraph("No reply has been drafted for this notice yet.")
+
+    # 5. Evidence index
+    doc.add_paragraph("")
+    doc.add_paragraph().add_run("5. Evidence index").bold = True
+    ev = payload.get("evidence_index") or []
+    if ev:
+        et = doc.add_table(rows=1 + len(ev), cols=3); et.style = "Light List"
+        for c, h in enumerate(["Ref", "Document", "Source type"]):
+            et.rows[0].cells[c].text = h
+        for i, e in enumerate(ev, start=1):
+            cells = et.rows[i].cells
+            cells[0].text = e.get("ref") or ""
+            cells[1].text = e.get("filename") or ""
+            cells[2].text = (e.get("source_type") or "").replace("_", " ")
+        doc.add_paragraph(
+            "Files are provided in the evidence bundle (.zip), named to match "
+            "the reference column.").runs[0].font.size = Pt(9)
+    else:
+        doc.add_paragraph("No evidence artifacts are linked.")
+
+    # CA commentary (shared behavior)
+    blocks = _notes_blocks(notes_html) if notes_html else []
+    if blocks:
+        doc.add_paragraph("")
+        doc.add_paragraph().add_run("CA commentary").bold = True
+        for b in blocks:
+            doc.add_paragraph(b)
+
+    # Sign-off + page numbers (same as at-risk)
+    doc.add_paragraph("")
+    signoff = doc.add_table(rows=2, cols=2); signoff.style = "Light List"
+    signoff.rows[0].cells[0].text = "Prepared by"; signoff.rows[0].cells[1].text = "Reviewed by"
+    _bold_cell(signoff.rows[0].cells[0]); _bold_cell(signoff.rows[0].cells[1])
+    signoff.rows[1].cells[0].text = meta.get("prepared_by") or "— pending —"
+    signoff.rows[1].cells[1].text = meta.get("reviewed_by") or "— pending —"
+
+    _page_number_footer(doc)
+    buf = io.BytesIO(); doc.save(buf)
     return buf.getvalue()
 
 
