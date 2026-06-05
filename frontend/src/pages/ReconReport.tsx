@@ -3,30 +3,52 @@
  * Path: /clients/:id/recon/:reconId
  */
 import { useState } from "react"
-import { Link, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
 import { LineItemDrawer } from "@/components/reconciliation/LineItemDrawer"
 import { ReconBreakdownChart } from "@/components/reconciliation/ReconBreakdownChart"
 import { ReconHeroCard } from "@/components/reconciliation/ReconHeroCard"
 import { ReconLineItemsTable } from "@/components/reconciliation/ReconLineItemsTable"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PageLoading, Spinner } from "@/components/ui/Loading"
 import { useClient } from "@/hooks/useClients"
 import { useReconciliation, useReconLineItems } from "@/hooks/useReconciliations"
+import {
+  useComposeWorkingPaper, useWorkingPapersList,
+} from "@/hooks/useWorkingPapers"
 import { ApiError, api } from "@/lib/api"
 import type { ReconLineItemRow } from "@/types/reconciliation"
+import type { WorkingPaper } from "@/types/workingPapers"
 
 export function ReconReport() {
   const { id: clientId, reconId } = useParams<{ id: string; reconId: string }>()
+  const navigate = useNavigate()
   const { data: client } = useClient(clientId)
   const { data: recon, isLoading: reconLoading } = useReconciliation(reconId)
   const { data: items, isLoading: itemsLoading } = useReconLineItems(reconId)
+  const workingPapers = useWorkingPapersList(clientId, "at_risk_itc_schedule")
+  const compose = useComposeWorkingPaper(reconId ?? "")
 
   const [selected, setSelected] = useState<ReconLineItemRow | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
+
+  const reconWorkingPapers: WorkingPaper[] = (workingPapers.data ?? [])
+    .filter((wp) => wp.reconciliation_id === reconId)
+
+  async function handleGenerateAtRiskItc() {
+    if (!reconId || !clientId) return
+    try {
+      const out = await compose.mutateAsync("at_risk_itc_schedule")
+      toast.success("Schedule generated.")
+      navigate(`/clients/${clientId}/working-papers/${out.working_paper_id}`)
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : (e as Error).message)
+    }
+  }
 
   function openDrawer(item: ReconLineItemRow) {
     setSelected(item)
@@ -128,6 +150,50 @@ export function ReconReport() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="text-base">Working papers</CardTitle>
+            <Button
+              variant="outline"
+              onClick={handleGenerateAtRiskItc}
+              disabled={compose.isPending || !reconId}
+            >
+              {compose.isPending ? "Generating…" : "Generate At-Risk ITC Schedule"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {reconWorkingPapers.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              No working papers for this reconciliation yet. Generate an
+              At-Risk ITC Schedule to surface suppliers needing follow-up.
+            </p>
+          ) : (
+            <ul className="divide-y">
+              {reconWorkingPapers.map((wp) => (
+                <li key={wp.id} className="flex items-center justify-between py-2">
+                  <Link
+                    to={`/clients/${clientId}/working-papers/${wp.id}`}
+                    className="text-sm font-medium text-slate-900 hover:underline"
+                  >
+                    At-Risk ITC Schedule
+                  </Link>
+                  <div className="flex items-center gap-3 text-xs text-slate-500">
+                    <span>{new Date(wp.created_at).toLocaleString()}</span>
+                    {wp.status === "finalized" ? (
+                      <Badge variant="secondary">Finalized</Badge>
+                    ) : (
+                      <Badge variant="outline">Draft</Badge>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       <LineItemDrawer item={selected} open={drawerOpen} onOpenChange={setDrawerOpen} />
     </div>

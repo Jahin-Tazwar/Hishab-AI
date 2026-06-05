@@ -24,6 +24,7 @@ import { NoticeList } from "@/pages/NoticeList"
 import { Onboard } from "@/pages/Onboard"
 import { ReconReport } from "@/pages/ReconReport"
 import { Signup } from "@/pages/Signup"
+import { WorkingPaperDetail } from "@/pages/WorkingPaperDetail"
 
 function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -97,6 +98,12 @@ export const router = createBrowserRouter([
   {
     path: "/clients/:id/notices/:noticeId/draft",
     element: <RootLayout><ProtectedRoute><NoticeDraft /></ProtectedRoute></RootLayout>,
+  },
+
+  // Working papers
+  {
+    path: "/clients/:id/working-papers/:wpId",
+    element: <RootLayout><ProtectedRoute><WorkingPaperDetail /></ProtectedRoute></RootLayout>,
   },
 
   { path: "*", element: <RootLayout><NotFound /></RootLayout> },
