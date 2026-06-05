@@ -4,11 +4,13 @@ from __future__ import annotations
 from typing import Any
 
 from app.working_papers.recipes.at_risk_itc import AtRiskItcScheduleRecipe
+from app.working_papers.recipes.audit_defense_pack import AuditDefensePackRecipe
 from app.working_papers.recipes.base import Recipe
 
 
 _REGISTRY: dict[str, Recipe] = {
     AtRiskItcScheduleRecipe.id: AtRiskItcScheduleRecipe(),
+    AuditDefensePackRecipe.id: AuditDefensePackRecipe(),
 }
 
 
