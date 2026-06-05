@@ -12,7 +12,9 @@
  */
 import { z } from "zod"
 
-export const WORKING_PAPER_KINDS = ["at_risk_itc_schedule"] as const
+export const WORKING_PAPER_KINDS = [
+  "at_risk_itc_schedule", "audit_defense_pack",
+] as const
 export type WorkingPaperKind = (typeof WORKING_PAPER_KINDS)[number]
 
 export const WORKING_PAPER_STATUSES = ["draft", "finalized"] as const
@@ -102,6 +104,63 @@ export const atRiskItcSchedulePayloadSchema = z.object({
   supplier_groups: z.array(atRiskSupplierGroupSchema),
 })
 export type AtRiskItcSchedulePayload = z.infer<typeof atRiskItcSchedulePayloadSchema>
+
+export const noticeSummarySchema = z.object({
+  notice_no: z.string().nullable().optional(),
+  notice_date: z.string().nullable().optional(),
+  notice_type: z.string().nullable().optional(),
+  period_start: z.string().nullable().optional(),
+  period_end: z.string().nullable().optional(),
+  taxpayer_bin: z.string().nullable().optional(),
+  taxpayer_tin: z.string().nullable().optional(),
+  alleged_itc_claimed_bdt: z.string().nullable().optional(),
+  alleged_itc_allowed_bdt: z.string().nullable().optional(),
+  alleged_shortfall_bdt: z.string().nullable().optional(),
+})
+
+export const overrideLogEntrySchema = z.object({
+  supplier_name: z.string().nullable().optional(),
+  supplier_bin: z.string().nullable().optional(),
+  invoice_no: z.string().nullable().optional(),
+  ca_override: z.enum(WP_CA_OVERRIDES).nullable().optional(),
+  ca_notes: z.string().nullable().optional(),
+})
+
+export const draftedReplyBlockSchema = z.object({
+  language: z.string().nullable().optional(),
+  status: z.string().nullable().optional(),
+  body_html: z.string(),
+  citations: z.array(z.record(z.unknown())).default([]),
+})
+
+export const evidenceItemSchema = z.object({
+  ref: z.string(),
+  document_id: z.string().uuid().nullable().optional(),
+  filename: z.string(),
+  source_type: z.string(),
+  bucket: z.string(),
+  storage_path: z.string(),
+})
+
+export const auditDefensePackPayloadSchema = z.object({
+  kind: z.literal("audit_defense_pack"),
+  recipe_version: z.string(),
+  client_id: uuid,
+  client_name: z.string(),
+  client_bin: z.string().nullable().optional(),
+  client_tin: z.string().nullable().optional(),
+  notice_id: uuid,
+  notice: noticeSummarySchema,
+  reconciliation_id: uuid.nullable().optional(),
+  reconciled_position: atRiskItcSchedulePayloadSchema.nullable().optional(),
+  override_log: z.array(overrideLogEntrySchema).default([]),
+  drafted_reply: draftedReplyBlockSchema.nullable().optional(),
+  evidence_index: z.array(evidenceItemSchema).default([]),
+})
+export type AuditDefensePackPayload = z.infer<typeof auditDefensePackPayloadSchema>
+export type OverrideLogEntry = z.infer<typeof overrideLogEntrySchema>
+export type EvidenceItem = z.infer<typeof evidenceItemSchema>
+export type NoticeSummary = z.infer<typeof noticeSummarySchema>
 
 export const workingPaperSchema = z.object({
   id: uuid,
