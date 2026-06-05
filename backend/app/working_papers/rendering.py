@@ -124,6 +124,69 @@ def render_docx(
     raise ValueError(f"Unknown working paper kind: {kind!r}")
 
 
+def _emit_summary_table(doc, s: dict) -> None:
+    summary_table = doc.add_table(rows=4, cols=2)
+    summary_table.style = "Light List"
+    pairs = [
+        ("Total VAT claimed (BDT)", _fmt_bdt(s["total_vat_claimed_bdt"])),
+        ("Safe ITC (BDT)", _fmt_bdt(s["safe_itc_bdt"])),
+        ("At-risk ITC (BDT)", _fmt_bdt(s["at_risk_itc_bdt"])),
+        ("Lines flagged",
+         f"{s['at_risk_line_count']} of {s['total_lines']} "
+         f"(across {s['supplier_count_at_risk']} supplier(s))"),
+    ]
+    for i, (k, v) in enumerate(pairs):
+        summary_table.rows[i].cells[0].text = k
+        summary_table.rows[i].cells[1].text = v
+        _right(summary_table.rows[i].cells[1])
+
+
+def _emit_supplier_section(doc, supplier_groups: list) -> Decimal:
+    grand_total = Decimal("0.00")
+    for grp in supplier_groups:
+        grand_total += Decimal(str(grp.get("total_vat_at_risk_bdt") or "0"))
+        gh = doc.add_paragraph()
+        gr = gh.add_run(
+            f"{grp.get('supplier_name') or '(unknown supplier)'}"
+            + (f" — BIN {grp['supplier_bin']}" if grp.get("supplier_bin") else "")
+            + f"   ·   VAT at risk: BDT {_fmt_bdt(grp['total_vat_at_risk_bdt'])}"
+            + f"   ·   {grp['line_count']} line(s)")
+        gr.bold = True
+
+        lines = grp["lines"]
+        table = doc.add_table(rows=2 + len(lines), cols=7)
+        table.style = "Light List"
+        headers = ["Invoice no", "Invoice date", "Claimed VAT (BDT)",
+                   "Supplier VAT (BDT)", "Variance (BDT)", "Match",
+                   "Recommended action"]
+        for c, label in enumerate(headers):
+            table.rows[0].cells[c].text = label
+        for c in (2, 3, 4):
+            _right(table.rows[0].cells[c])
+        for i, line in enumerate(lines, start=1):
+            row = table.rows[i].cells
+            row[0].text = str(line.get("invoice_no") or "")
+            row[1].text = str(line.get("invoice_date") or "")
+            row[2].text = _fmt_bdt(line.get("vat_amount_bdt"))
+            sf_vat = line.get("sf_vat_amount_bdt")
+            row[3].text = _fmt_bdt(sf_vat) if sf_vat else "not filed"
+            row[4].text = _fmt_bdt(line.get("vat_variance_bdt"))
+            override = line.get("ca_override")
+            ms = line["match_status"]
+            match_txt = ms if not override else f"{ms} ({override})"
+            reason = line.get("discrepancy_reason")
+            row[5].text = f"{match_txt}\n{reason}" if reason else match_txt
+            row[6].text = (line["recommended_action"] or "").replace("_", " ")
+            for c in (2, 3, 4):
+                _right(row[c])
+        foot = table.rows[1 + len(lines)].cells
+        foot[1].text = "Subtotal"
+        _bold_cell(foot[1])
+        foot[4].text = _fmt_bdt(grp["total_vat_at_risk_bdt"])
+        _right(foot[4]); _bold_cell(foot[4])
+    return grand_total
+
+
 def _render_at_risk_itc_schedule(
     payload: dict, notes_html: str, tenant: dict, meta: dict,
 ) -> bytes:
@@ -180,78 +243,13 @@ def _render_at_risk_itc_schedule(
     # ── Summary ──
     doc.add_paragraph("")
     doc.add_paragraph().add_run("Summary").bold = True
-    s = payload["summary"]
-    summary_table = doc.add_table(rows=4, cols=2)
-    summary_table.style = "Light List"
-    pairs = [
-        ("Total VAT claimed (BDT)", _fmt_bdt(s["total_vat_claimed_bdt"])),
-        ("Safe ITC (BDT)", _fmt_bdt(s["safe_itc_bdt"])),
-        ("At-risk ITC (BDT)", _fmt_bdt(s["at_risk_itc_bdt"])),
-        (
-            "Lines flagged",
-            f"{s['at_risk_line_count']} of {s['total_lines']} "
-            f"(across {s['supplier_count_at_risk']} supplier(s))",
-        ),
-    ]
-    for i, (k, v) in enumerate(pairs):
-        summary_table.rows[i].cells[0].text = k
-        summary_table.rows[i].cells[1].text = v
-        _right(summary_table.rows[i].cells[1])
+    _emit_summary_table(doc, payload["summary"])
 
     # ── Per-supplier detail ──
     doc.add_paragraph("")
     doc.add_paragraph().add_run("At-risk lines by supplier").bold = True
 
-    grand_total = Decimal("0.00")
-    for grp in payload["supplier_groups"]:
-        grand_total += Decimal(str(grp.get("total_vat_at_risk_bdt") or "0"))
-        gh = doc.add_paragraph()
-        gr = gh.add_run(
-            f"{grp.get('supplier_name') or '(unknown supplier)'}"
-            + (f" — BIN {grp['supplier_bin']}" if grp.get("supplier_bin") else "")
-            + f"   ·   VAT at risk: BDT {_fmt_bdt(grp['total_vat_at_risk_bdt'])}"
-            + f"   ·   {grp['line_count']} line(s)"
-        )
-        gr.bold = True
-
-        lines = grp["lines"]
-        # rows: header + lines + a footing total row
-        table = doc.add_table(rows=2 + len(lines), cols=7)
-        table.style = "Light List"
-        hdr = table.rows[0].cells
-        headers = [
-            "Invoice no", "Invoice date", "Claimed VAT (BDT)",
-            "Supplier VAT (BDT)", "Variance (BDT)", "Match", "Recommended action",
-        ]
-        for c, label in enumerate(headers):
-            hdr[c].text = label
-        for c in (2, 3, 4):
-            _right(hdr[c])
-
-        for i, line in enumerate(lines, start=1):
-            row = table.rows[i].cells
-            row[0].text = str(line.get("invoice_no") or "")
-            row[1].text = str(line.get("invoice_date") or "")
-            row[2].text = _fmt_bdt(line.get("vat_amount_bdt"))
-            sf_vat = line.get("sf_vat_amount_bdt")
-            row[3].text = _fmt_bdt(sf_vat) if sf_vat else "not filed"
-            row[4].text = _fmt_bdt(line.get("vat_variance_bdt"))
-            override = line.get("ca_override")
-            ms = line["match_status"]
-            match_txt = ms if not override else f"{ms} ({override})"
-            reason = line.get("discrepancy_reason")
-            row[5].text = f"{match_txt}\n{reason}" if reason else match_txt
-            row[6].text = (line["recommended_action"] or "").replace("_", " ")
-            for c in (2, 3, 4):
-                _right(row[c])
-
-        # footing total row
-        foot = table.rows[1 + len(lines)].cells
-        foot[1].text = "Subtotal"
-        _bold_cell(foot[1])
-        foot[4].text = _fmt_bdt(grp["total_vat_at_risk_bdt"])
-        _right(foot[4])
-        _bold_cell(foot[4])
+    grand_total = _emit_supplier_section(doc, payload["supplier_groups"])
 
     # grand total
     gt = doc.add_paragraph()
@@ -285,4 +283,7 @@ def _render_at_risk_itc_schedule(
     return buf.getvalue()
 
 
-__all__ = ["render_docx", "render_pdf", "_fmt_bdt", "PdfRendererUnavailableError"]
+__all__ = [
+    "render_docx", "render_pdf", "_fmt_bdt", "PdfRendererUnavailableError",
+    "_emit_summary_table", "_emit_supplier_section",
+]
