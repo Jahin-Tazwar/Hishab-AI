@@ -21,6 +21,7 @@ def _to_2dp(value: Decimal | float | int | str) -> Decimal:
 
 class WorkingPaperKind(str, Enum):
     AT_RISK_ITC_SCHEDULE = "at_risk_itc_schedule"
+    AUDIT_DEFENSE_PACK = "audit_defense_pack"
 
 
 class WorkingPaperStatus(str, Enum):
@@ -113,9 +114,72 @@ class AtRiskItcSchedulePayload(BaseModel):
     supplier_groups: list[AtRiskSupplierGroup]
 
 
+# ── Audit Defense Pack payload ─────────────────────────────────────────────
+
+
+class NoticeSummary(BaseModel):
+    notice_no: Optional[str] = None
+    notice_date: Optional[date] = None
+    notice_type: Optional[str] = None
+    period_start: Optional[date] = None
+    period_end: Optional[date] = None
+    taxpayer_bin: Optional[str] = None
+    taxpayer_tin: Optional[str] = None
+    alleged_itc_claimed_bdt: Optional[Decimal] = None
+    alleged_itc_allowed_bdt: Optional[Decimal] = None
+    alleged_shortfall_bdt: Optional[Decimal] = None
+
+    @field_serializer(
+        "alleged_itc_claimed_bdt", "alleged_itc_allowed_bdt",
+        "alleged_shortfall_bdt", when_used="json",
+    )
+    def _money(self, v: Optional[Decimal]) -> Optional[str]:
+        return str(v) if v is not None else None
+
+
+class OverrideLogEntry(BaseModel):
+    supplier_name: Optional[str] = None
+    supplier_bin: Optional[str] = None
+    invoice_no: Optional[str] = None
+    ca_override: Optional[Literal["approved", "disputed", "ignore"]] = None
+    ca_notes: Optional[str] = None
+
+
+class DraftedReplyBlock(BaseModel):
+    language: Optional[str] = None
+    status: Optional[str] = None
+    body_html: str = ""
+    citations: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class EvidenceItem(BaseModel):
+    ref: str
+    document_id: Optional[UUID] = None
+    filename: str
+    source_type: str
+    bucket: str
+    storage_path: str
+
+
+class AuditDefensePackPayload(BaseModel):
+    kind: Literal["audit_defense_pack"] = "audit_defense_pack"
+    recipe_version: str
+    client_id: UUID
+    client_name: str
+    client_bin: Optional[str] = None
+    client_tin: Optional[str] = None
+    notice_id: UUID
+    notice: NoticeSummary
+    reconciliation_id: Optional[UUID] = None
+    reconciled_position: Optional[AtRiskItcSchedulePayload] = None
+    override_log: list[OverrideLogEntry] = Field(default_factory=list)
+    drafted_reply: Optional[DraftedReplyBlock] = None
+    evidence_index: list[EvidenceItem] = Field(default_factory=list)
+
+
 # Future kinds added to this union; discriminator on `kind`.
 WorkingPaperPayload = Annotated[
-    Union[AtRiskItcSchedulePayload],
+    Union[AtRiskItcSchedulePayload, AuditDefensePackPayload],
     Field(discriminator="kind"),
 ]
 

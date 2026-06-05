@@ -130,3 +130,51 @@ def test_enum_values_match_postgres():
     assert WorkingPaperKind.AT_RISK_ITC_SCHEDULE.value == "at_risk_itc_schedule"
     assert WorkingPaperStatus.DRAFT.value == "draft"
     assert WorkingPaperStatus.FINALIZED.value == "finalized"
+
+
+def test_audit_defense_pack_payload_round_trips():
+    from app.working_papers.schemas import AuditDefensePackPayload
+    from uuid import uuid4
+
+    payload = {
+        "kind": "audit_defense_pack",
+        "recipe_version": "v1",
+        "client_id": str(uuid4()),
+        "client_name": "Padma Textiles Ltd",
+        "client_bin": "001234567-0101",
+        "client_tin": "555000111",
+        "notice_id": str(uuid4()),
+        "notice": {
+            "notice_no": "NBR/VAT/2026/4471",
+            "notice_date": "2026-05-20",
+            "notice_type": "input_vat_mismatch",
+            "period_start": "2026-04-01",
+            "period_end": "2026-04-30",
+            "taxpayer_bin": "001234567-0101",
+            "taxpayer_tin": "555000111",
+            "alleged_itc_claimed_bdt": "2847500.00",
+            "alleged_itc_allowed_bdt": "2412000.00",
+            "alleged_shortfall_bdt": "435500.00",
+        },
+        "reconciliation_id": str(uuid4()),
+        "reconciled_position": None,
+        "override_log": [
+            {"supplier_name": "Meghna", "supplier_bin": "0044",
+             "invoice_no": "MP-7798", "ca_override": "disputed",
+             "ca_notes": "Awaiting amended Mushak 6.3"},
+        ],
+        "drafted_reply": {
+            "language": "bn", "status": "finalized",
+            "body_html": "<p>reply</p>", "citations": [{"source_ref": "Rule 21"}],
+        },
+        "evidence_index": [
+            {"ref": "E-01", "document_id": str(uuid4()),
+             "filename": "pr.xlsx", "source_type": "purchase_register",
+             "bucket": "recon-files", "storage_path": "t/c/pr.xlsx"},
+        ],
+    }
+    model = AuditDefensePackPayload.model_validate(payload)
+    dumped = model.model_dump(mode="json")
+    assert dumped["notice"]["alleged_shortfall_bdt"] == "435500.00"
+    assert dumped["evidence_index"][0]["ref"] == "E-01"
+    assert dumped["override_log"][0]["ca_override"] == "disputed"
