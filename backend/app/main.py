@@ -244,6 +244,10 @@ def create_app() -> FastAPI:
         app.include_router(notices_router)
         logger.info("notices.router_registered")
 
+        from app.working_papers.router import router as working_papers_router
+        app.include_router(working_papers_router)
+        logger.info("working_papers.router_registered")
+
     return app
 
 
