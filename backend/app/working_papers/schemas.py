@@ -140,6 +140,9 @@ class WorkingPaperOut(BaseModel):
     composed_by: UUID
     created_at: datetime
     updated_at: datetime
+    # Computed on read: true when the source reconciliation's headline
+    # aggregates have changed since this paper was composed/regenerated.
+    is_stale: Optional[bool] = None
 
 
 class ComposeWorkingPaperRequest(BaseModel):

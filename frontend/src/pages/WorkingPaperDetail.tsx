@@ -78,6 +78,18 @@ export function WorkingPaperDetail() {
         clientName={client.data?.name}
       />
 
+      {workingPaper.is_stale ? (
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+          <span className="font-medium">Source reconciliation changed.</span>{" "}
+          The headline figures no longer match the reconciliation this paper was
+          composed from. Regenerate to refresh the schedule
+          {workingPaper.status === "finalized"
+            ? " (reopen it first)"
+            : ""}
+          .
+        </div>
+      ) : null}
+
       {payload ? (
         <AtRiskItcScheduleEditor workingPaper={workingPaper} payload={payload} />
       ) : (

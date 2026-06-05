@@ -37,3 +37,10 @@ class WorkingPaperInvalidStateError(WorkingPaperError):
 class RecipeComposeError(WorkingPaperError):
     default_code = "RECIPE_COMPOSE_ERROR"
     default_status = 400
+
+
+class WorkingPaperReviewError(WorkingPaperError):
+    """Finalizing requires a reviewer different from the preparer (segregation
+    of duties). Raised when the same user tries to compose and sign off."""
+    default_code = "WORKING_PAPER_REVIEW_REQUIRED"
+    default_status = 409

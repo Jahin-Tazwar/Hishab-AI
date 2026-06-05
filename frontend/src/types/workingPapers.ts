@@ -120,6 +120,9 @@ export const workingPaperSchema = z.object({
   composed_by: uuid,
   created_at: z.string(),
   updated_at: z.string(),
+  // Computed server-side: true when the source reconciliation's headline
+  // aggregates changed after this paper was composed.
+  is_stale: z.boolean().nullable().optional(),
 })
 export type WorkingPaper = z.infer<typeof workingPaperSchema>
 

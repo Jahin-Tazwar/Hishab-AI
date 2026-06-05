@@ -8,11 +8,14 @@ from uuid import UUID
 
 import structlog
 
+from decimal import Decimal
+
 from app.working_papers import persistence as p
 from app.working_papers.exceptions import (
     RecipeComposeError,
     WorkingPaperInvalidStateError,
     WorkingPaperNotFoundError,
+    WorkingPaperReviewError,
 )
 from app.working_papers.recipes import get_recipe
 from app.working_papers.rendering import (
@@ -43,7 +46,7 @@ async def _fetch_tenant_meta(tenant_id: UUID) -> dict:
     def _q():
         return (
             sb.table("tenants")
-            .select("*")
+            .select("firm_name, firm_name_bn, icab_reg_no, address, email, phone")
             .eq("id", str(tenant_id))
             .single()
             .execute()
@@ -55,9 +58,44 @@ async def _fetch_tenant_meta(tenant_id: UUID) -> dict:
     except Exception:
         row = {}
     return {
-        "firm_name": row.get("name") or row.get("firm_name") or "Chartered Accountants",
+        "firm_name": row.get("firm_name") or "Chartered Accountants",
+        "firm_name_bn": row.get("firm_name_bn") or "",
+        "icab_reg_no": row.get("icab_reg_no") or "",
         "address": row.get("address") or "",
+        "email": row.get("email") or "",
+        "phone": row.get("phone") or "",
     }
+
+
+async def _fetch_user_names(user_ids: list[Optional[str]]) -> dict[str, str]:
+    """Resolve user_profiles.full_name for a set of ids (for the sign-off block)."""
+    from app.database import get_supabase_admin
+    ids = [u for u in {str(i) for i in user_ids if i}]
+    if not ids:
+        return {}
+    sb = get_supabase_admin()
+
+    def _q():
+        return (
+            sb.table("user_profiles")
+            .select("id, full_name")
+            .in_("id", ids)
+            .execute()
+        )
+
+    try:
+        res = await asyncio.to_thread(_q)
+        return {r["id"]: (r.get("full_name") or "") for r in (res.data or [])}
+    except Exception:
+        return {}
+
+
+def _working_paper_reference(wp: dict) -> str:
+    """Stable human reference, e.g. WP-1A2B3C4D-202604."""
+    wid = str(wp["id"]).replace("-", "")[:8].upper()
+    period_end = wp.get("period_end") or ""
+    yyyymm = str(period_end).replace("-", "")[:6] if period_end else "000000"
+    return f"WP-{wid}-{yyyymm}"
 
 
 async def compose_working_paper(
@@ -120,12 +158,57 @@ async def compose_working_paper(
     return wp_id
 
 
+async def _fetch_recon_aggregates(
+    tenant_id: UUID, recon_id: str,
+) -> Optional[dict]:
+    """The live headline aggregates for the source reconciliation, used to
+    detect whether a composed working paper has gone stale."""
+    from app.database import get_supabase_admin
+    sb = get_supabase_admin()
+
+    def _q():
+        return (
+            sb.table("vat_reconciliations")
+            .select("total_vat_claimed_bdt, safe_itc_bdt, at_risk_itc_bdt")
+            .eq("id", str(recon_id))
+            .eq("tenant_id", str(tenant_id))
+            .single()
+            .execute()
+        )
+
+    try:
+        return (await asyncio.to_thread(_q)).data
+    except Exception:
+        return None
+
+
+def _aggregates_differ(snapshot: dict, live: dict) -> bool:
+    for key in ("total_vat_claimed_bdt", "safe_itc_bdt", "at_risk_itc_bdt"):
+        try:
+            if Decimal(str(snapshot.get(key) or "0")) != Decimal(str(live.get(key) or "0")):
+                return True
+        except Exception:
+            return True
+    return False
+
+
 async def get_working_paper(
     *, wp_id: UUID, tenant_id: UUID,
 ) -> Dict[str, Any]:
     wp = await p.get_working_paper(wp_id, tenant_id=tenant_id)
     if wp is None:
         raise WorkingPaperNotFoundError(f"Working paper {wp_id} not found")
+
+    # Staleness: compare the aggregates snapshotted in composed_json against the
+    # live reconciliation header. If a CA edited overrides on the recon after
+    # this paper was composed, the totals will diverge and the paper is stale.
+    wp["is_stale"] = False
+    recon_id = wp.get("reconciliation_id")
+    snapshot = (wp.get("composed_json") or {}).get("summary")
+    if recon_id and snapshot:
+        live = await _fetch_recon_aggregates(tenant_id, recon_id)
+        if live is not None and _aggregates_differ(snapshot, live):
+            wp["is_stale"] = True
     return wp
 
 
@@ -205,6 +288,15 @@ async def finalize_working_paper(
         raise WorkingPaperNotFoundError(f"Working paper {wp_id} not found")
     if wp["status"] == WorkingPaperStatus.FINALIZED.value:
         return UUID(wp["id"])  # idempotent
+
+    # Segregation of duties: the partner who signs off (reviewer) must differ
+    # from the staff who prepared the paper (composer).
+    if str(wp.get("composed_by")) == str(user_id):
+        raise WorkingPaperReviewError(
+            "The reviewer who finalizes a working paper must be different from "
+            "the preparer who composed it.",
+        )
+
     await p.finalize_working_paper(
         wp_id, tenant_id=tenant_id, finalized_by=user_id,
     )
@@ -241,10 +333,22 @@ async def export_working_paper(
         raise WorkingPaperNotFoundError(f"Working paper {wp_id} not found")
 
     tenant_meta = await _fetch_tenant_meta(tenant_id)
+    names = await _fetch_user_names([wp.get("composed_by"), wp.get("finalized_by")])
+    doc_meta = {
+        "reference": _working_paper_reference(wp),
+        "generated_on": date.today().isoformat(),
+        "prepared_by": names.get(str(wp.get("composed_by")), "") or None,
+        "reviewed_by": (
+            names.get(str(wp.get("finalized_by")), "") or None
+            if wp.get("finalized_by") else None
+        ),
+        "status": wp.get("status"),
+    }
     docx_bytes = render_docx(
         payload=wp["composed_json"],
         notes_html=wp.get("notes_html") or "",
         tenant=tenant_meta,
+        meta=doc_meta,
     )
     if format == "docx":
         return (
