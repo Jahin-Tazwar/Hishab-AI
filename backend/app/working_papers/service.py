@@ -11,6 +11,9 @@ import structlog
 from decimal import Decimal
 
 from app.working_papers import persistence as p
+from app.working_papers.bundle import (
+    EvidenceBundleTooLargeError, build_evidence_zip,
+)
 from app.working_papers.exceptions import (
     RecipeComposeError,
     WorkingPaperInvalidStateError,
@@ -373,6 +376,45 @@ async def export_working_paper(
         err.status_code = 503
         raise err
     return (pdf_bytes, "application/pdf", f"working-paper-{wp_id}.pdf")
+
+
+def _download_evidence(bucket: str, path: str) -> bytes:
+    from app.database import get_supabase_admin
+    return get_supabase_admin().storage.from_(bucket).download(path)
+
+
+async def export_evidence_bundle(
+    *, wp_id: UUID, tenant_id: UUID,
+) -> tuple[bytes, str, str]:
+    """Returns (zip_bytes, content_type, filename) for an audit_defense_pack."""
+    wp = await p.get_working_paper(wp_id, tenant_id=tenant_id)
+    if wp is None:
+        raise WorkingPaperNotFoundError(f"Working paper {wp_id} not found")
+    if wp["kind"] != WorkingPaperKind.AUDIT_DEFENSE_PACK.value:
+        raise WorkingPaperInvalidStateError(
+            "Evidence bundle is only available for an audit defense pack")
+
+    # Reuse the docx export (also resolves letterhead + sign-off meta).
+    docx_bytes, _ctype, _fname = await export_working_paper(
+        wp_id=wp_id, tenant_id=tenant_id, format="docx")
+
+    payload = wp["composed_json"] or {}
+    evidence = payload.get("evidence_index") or []
+    reference = _working_paper_reference(wp)
+
+    def _build() -> bytes:
+        return build_evidence_zip(
+            binder_docx=docx_bytes, evidence=evidence,
+            download=_download_evidence, reference=reference)
+
+    try:
+        zip_bytes = await asyncio.to_thread(_build)
+    except EvidenceBundleTooLargeError as e:
+        err = WorkingPaperInvalidStateError(str(e))
+        err.default_status = 413
+        err.status_code = 413
+        raise err
+    return (zip_bytes, "application/zip", f"audit-defense-pack-{reference}.zip")
 
 
 async def list_working_papers(

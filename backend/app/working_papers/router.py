@@ -139,3 +139,15 @@ async def export(
         media_type=ctype,
         headers={"Content-Disposition": f'attachment; filename="{fname}"'},
     )
+
+
+@router.get("/{wp_id}/evidence-bundle")
+async def evidence_bundle(
+    wp_id: UUID,
+    tenant_id: UUID = Depends(get_current_tenant_id),
+):
+    data, ctype, fname = await svc.export_evidence_bundle(
+        wp_id=wp_id, tenant_id=tenant_id)
+    return StreamingResponse(
+        io.BytesIO(data), media_type=ctype,
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'})
