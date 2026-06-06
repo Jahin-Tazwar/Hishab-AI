@@ -16,6 +16,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  evidenceBundleUrl,
   exportWorkingPaperUrl,
   useFinalizeWorkingPaper,
   useRegenerateWorkingPaper,
@@ -26,6 +27,7 @@ import type { WorkingPaper } from "@/types/workingPapers"
 
 const KIND_TITLES: Record<string, string> = {
   at_risk_itc_schedule: "At-Risk ITC Schedule",
+  audit_defense_pack: "Audit Defense Pack",
 }
 
 interface Props {
@@ -124,6 +126,15 @@ export function WorkingPaperHeader({ workingPaper, clientName }: Props) {
         >
           Export PDF
         </a>
+        {workingPaper.kind === "audit_defense_pack" ? (
+          <a
+            href={evidenceBundleUrl(workingPaper.id)}
+            download
+            className={buttonVariants({ variant: "outline" })}
+          >
+            Evidence bundle (.zip)
+          </a>
+        ) : null}
         {isFinalized ? (
           <Button onClick={() => setReopenOpen(true)}>
             Reopen for editing

@@ -30,7 +30,7 @@ export function ReconReport() {
   const { data: recon, isLoading: reconLoading } = useReconciliation(reconId)
   const { data: items, isLoading: itemsLoading } = useReconLineItems(reconId)
   const workingPapers = useWorkingPapersList(clientId, "at_risk_itc_schedule")
-  const compose = useComposeWorkingPaper(reconId ?? "")
+  const compose = useComposeWorkingPaper()
 
   const [selected, setSelected] = useState<ReconLineItemRow | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -42,7 +42,9 @@ export function ReconReport() {
   async function handleGenerateAtRiskItc() {
     if (!reconId || !clientId) return
     try {
-      const out = await compose.mutateAsync("at_risk_itc_schedule")
+      const out = await compose.mutateAsync({
+        kind: "at_risk_itc_schedule", reconciliation_id: reconId,
+      })
       toast.success("Schedule generated.")
       navigate(`/clients/${clientId}/working-papers/${out.working_paper_id}`)
     } catch (e) {

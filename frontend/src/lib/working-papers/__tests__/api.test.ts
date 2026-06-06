@@ -16,12 +16,30 @@ const UUID = "11111111-1111-1111-1111-111111111111"
 describe("working-papers api", () => {
   it("composeWorkingPaper posts the kind + reconciliation_id JSON", async () => {
     ;(api.post as any).mockResolvedValueOnce({ data: { working_paper_id: "wp1" } })
-    const out = await wpApi.composeWorkingPaper("at_risk_itc_schedule", UUID)
+    const out = await wpApi.composeWorkingPaper({
+      kind: "at_risk_itc_schedule", reconciliation_id: UUID,
+    })
     expect(out.working_paper_id).toBe("wp1")
     expect(api.post).toHaveBeenCalledWith(
       "/api/v1/working-papers/",
       { kind: "at_risk_itc_schedule", reconciliation_id: UUID },
     )
+  })
+
+  it("composeWorkingPaper posts notice_id for an audit_defense_pack", async () => {
+    ;(api.post as any).mockResolvedValueOnce({ data: { working_paper_id: "wp2" } })
+    await wpApi.composeWorkingPaper({
+      kind: "audit_defense_pack", notice_id: "n-1",
+    })
+    expect(api.post).toHaveBeenCalledWith(
+      "/api/v1/working-papers/",
+      { kind: "audit_defense_pack", notice_id: "n-1" },
+    )
+  })
+
+  it("evidenceBundleUrl points at the bundle endpoint", () => {
+    expect(wpApi.evidenceBundleUrl("wp-1"))
+      .toContain("/api/v1/working-papers/wp-1/evidence-bundle")
   })
 
   it("listWorkingPapers filters by client_id + kind and parses through Zod", async () => {

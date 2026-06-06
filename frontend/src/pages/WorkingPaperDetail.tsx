@@ -10,14 +10,17 @@
  */
 import { Link, useParams } from "react-router-dom"
 
+import type { ReactNode } from "react"
+
 import { AtRiskItcScheduleEditor } from "@/components/working-papers/AtRiskItcScheduleEditor"
+import { AuditDefensePackView } from "@/components/working-papers/AuditDefensePackView"
 import { WorkingPaperHeader } from "@/components/working-papers/WorkingPaperHeader"
 import { Card, CardContent } from "@/components/ui/card"
 import { PageLoading } from "@/components/ui/Loading"
 import { useClient } from "@/hooks/useClients"
 import { useWorkingPaper } from "@/hooks/useWorkingPapers"
 import {
-  atRiskItcSchedulePayloadSchema, type AtRiskItcSchedulePayload,
+  atRiskItcSchedulePayloadSchema, auditDefensePackPayloadSchema,
 } from "@/types/workingPapers"
 
 export function WorkingPaperDetail() {
@@ -43,14 +46,32 @@ export function WorkingPaperDetail() {
   const workingPaper = wp.data
 
   // Defensive parse of the composed payload by kind.
-  let payload: AtRiskItcSchedulePayload | null = null
+  let body: ReactNode = null
   let payloadError: string | null = null
   if (workingPaper.kind === "at_risk_itc_schedule") {
     const parsed = atRiskItcSchedulePayloadSchema.safeParse(
       workingPaper.composed_json,
     )
     if (parsed.success) {
-      payload = parsed.data
+      body = (
+        <AtRiskItcScheduleEditor
+          workingPaper={workingPaper}
+          payload={parsed.data}
+        />
+      )
+    } else {
+      payloadError = parsed.error.issues
+        .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+        .join("; ")
+      // eslint-disable-next-line no-console
+      console.error("Invalid working paper payload", parsed.error)
+    }
+  } else if (workingPaper.kind === "audit_defense_pack") {
+    const parsed = auditDefensePackPayloadSchema.safeParse(
+      workingPaper.composed_json,
+    )
+    if (parsed.success) {
+      body = <AuditDefensePackView payload={parsed.data} />
     } else {
       payloadError = parsed.error.issues
         .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
@@ -90,8 +111,8 @@ export function WorkingPaperDetail() {
         </div>
       ) : null}
 
-      {payload ? (
-        <AtRiskItcScheduleEditor workingPaper={workingPaper} payload={payload} />
+      {body ? (
+        body
       ) : (
         <Card>
           <CardContent className="py-6">

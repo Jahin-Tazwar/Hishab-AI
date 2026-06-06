@@ -27,12 +27,18 @@ const BASE = "/api/v1/working-papers"
 
 export interface ComposeWorkingPaperResponse { working_paper_id: string }
 
+export interface ComposeWorkingPaperRequest {
+  kind: WorkingPaperKind
+  reconciliation_id?: string
+  notice_id?: string
+}
+
 export async function composeWorkingPaper(
-  kind: WorkingPaperKind, reconciliationId: string,
+  request: ComposeWorkingPaperRequest,
 ): Promise<ComposeWorkingPaperResponse> {
   const { data } = await api.post<ComposeWorkingPaperResponse>(
     `${BASE}/`,
-    { kind, reconciliation_id: reconciliationId },
+    request,
   )
   return data
 }
@@ -86,4 +92,8 @@ export function exportWorkingPaperUrl(
   wpId: string, format: "docx" | "pdf",
 ): string {
   return `${BASE}/${wpId}/export?format=${format}`
+}
+
+export function evidenceBundleUrl(wpId: string): string {
+  return `${BASE}/${wpId}/evidence-bundle`
 }

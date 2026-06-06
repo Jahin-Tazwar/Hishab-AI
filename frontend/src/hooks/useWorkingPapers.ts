@@ -9,6 +9,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
   composeWorkingPaper,
+  evidenceBundleUrl,
   exportWorkingPaperUrl,
   finalizeWorkingPaper,
   getWorkingPaper,
@@ -17,6 +18,7 @@ import {
   regenerateWorkingPaper,
   reopenWorkingPaper,
   updateWorkingPaperNotes,
+  type ComposeWorkingPaperRequest,
 } from "@/lib/working-papers/api"
 import type {
   WorkingPaper, WorkingPaperKind, WorkingPaperRevision,
@@ -53,11 +55,11 @@ export function useWorkingPaper(wpId: string | undefined) {
   })
 }
 
-export function useComposeWorkingPaper(reconciliationId: string) {
+export function useComposeWorkingPaper() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (kind: WorkingPaperKind) =>
-      composeWorkingPaper(kind, reconciliationId),
+    mutationFn: (request: ComposeWorkingPaperRequest) =>
+      composeWorkingPaper(request),
     onSuccess: () => {
       // Invalidate every list cache (we don't know the clientId here).
       void qc.invalidateQueries({ queryKey: workingPaperKeys.all })
@@ -114,4 +116,4 @@ export function useWorkingPaperRevisions(wpId: string | undefined) {
   })
 }
 
-export { exportWorkingPaperUrl }
+export { evidenceBundleUrl, exportWorkingPaperUrl }
