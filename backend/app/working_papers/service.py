@@ -214,9 +214,15 @@ async def get_working_paper(
     # Staleness: compare the aggregates snapshotted in composed_json against the
     # live reconciliation header. If a CA edited overrides on the recon after
     # this paper was composed, the totals will diverge and the paper is stale.
+    # The at-risk schedule holds its summary at the top level; the audit defense
+    # pack nests it under reconciled_position.
     wp["is_stale"] = False
+    composed = wp.get("composed_json") or {}
+    snapshot = composed.get("summary")
+    if snapshot is None:
+        rp = composed.get("reconciled_position") or {}
+        snapshot = rp.get("summary") if isinstance(rp, dict) else None
     recon_id = wp.get("reconciliation_id")
-    snapshot = (wp.get("composed_json") or {}).get("summary")
     if recon_id and snapshot:
         live = await _fetch_recon_aggregates(tenant_id, recon_id)
         if live is not None and _aggregates_differ(snapshot, live):
@@ -268,6 +274,12 @@ async def regenerate_working_paper(
                 "Cannot regenerate: reconciliation_id missing",
             )
         inputs["reconciliation_id"] = UUID(wp["reconciliation_id"])
+    elif kind == WorkingPaperKind.AUDIT_DEFENSE_PACK:
+        if wp.get("notice_id") is None:
+            raise WorkingPaperInvalidStateError(
+                "Cannot regenerate: notice_id missing",
+            )
+        inputs["notice_id"] = UUID(wp["notice_id"])
 
     try:
         payload = await recipe.compose(tenant_id=tenant_id, **inputs)

@@ -98,6 +98,7 @@ class AuditDefensePackRecipe:
                     return (sb.table("documents")
                             .select("id, original_filename, storage_path, doc_type")
                             .eq("id", str(d)).eq("tenant_id", str(tenant_id))
+                            .is_("deleted_at", "null")
                             .execute())
 
                 result = (await asyncio.to_thread(_q_doc)).data

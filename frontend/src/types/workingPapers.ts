@@ -168,6 +168,7 @@ export const workingPaperSchema = z.object({
   client_id: uuid,
   kind: z.enum(WORKING_PAPER_KINDS),
   reconciliation_id: uuid.nullable().optional(),
+  notice_id: uuid.nullable().optional(),
   period_start: z.string().nullable().optional(),
   period_end: z.string().nullable().optional(),
   recipe_version: z.string(),

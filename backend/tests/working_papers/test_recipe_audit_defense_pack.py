@@ -80,6 +80,7 @@ class _Tbl:
     def select(self, *_a, **_k): return self
     def eq(self, k, v): self._f[k] = v; return self
     def in_(self, k, v): self._f[k] = v; return self
+    def is_(self, k, v): self._f[k] = v; return self
     def order(self, *_a, **_k): return self
     def range(self, s, e): self._range = (s, e); return self
     def limit(self, *_a, **_k): return self

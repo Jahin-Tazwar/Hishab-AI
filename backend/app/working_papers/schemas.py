@@ -193,6 +193,7 @@ class WorkingPaperOut(BaseModel):
     client_id: UUID
     kind: WorkingPaperKind
     reconciliation_id: Optional[UUID] = None
+    notice_id: Optional[UUID] = None
     period_start: Optional[date] = None
     period_end: Optional[date] = None
     recipe_version: str

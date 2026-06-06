@@ -197,3 +197,41 @@ def test_compose_audit_defense_pack_persists_notice_id(monkeypatch):
     ))
     assert captured["inputs"] == {"notice_id": notice_id}
     assert captured["create"]["notice_id"] == notice_id
+
+
+def test_regenerate_audit_defense_pack_passes_notice_id(monkeypatch):
+    """Regression: regenerate must forward notice_id for an audit pack, not
+    call the recipe with empty inputs (which would TypeError)."""
+    from uuid import uuid4
+    notice_id = uuid4()
+    captured = {}
+
+    async def _get(wp_id, *, tenant_id):
+        return _wp(kind="audit_defense_pack", reconciliation_id=None,
+                   notice_id=str(notice_id), composed_json={})
+
+    class _Recipe:
+        id = "audit_defense_pack"
+        version = "v1"
+        async def compose(self, *, tenant_id, **inputs):
+            captured["inputs"] = inputs
+            return {
+                "kind": "audit_defense_pack", "recipe_version": "v1",
+                "client_id": str(uuid4()), "client_name": "X",
+                "notice_id": str(notice_id), "notice": {},
+                "reconciliation_id": None, "reconciled_position": None,
+                "override_log": [], "drafted_reply": None, "evidence_index": [],
+            }
+
+    async def _update(*a, **kw):
+        captured["updated"] = True
+
+    monkeypatch.setattr(svc.p, "get_working_paper", _get)
+    monkeypatch.setattr(svc, "get_recipe", lambda rid: _Recipe())
+    monkeypatch.setattr(svc.p, "update_working_paper", _update)
+
+    _run(svc.regenerate_working_paper(
+        wp_id=WP_ID, tenant_id=TENANT, user_id=REVIEWER,
+    ))
+    assert captured["inputs"] == {"notice_id": notice_id}
+    assert captured["updated"] is True
